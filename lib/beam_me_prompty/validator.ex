@@ -6,6 +6,8 @@ defmodule BeamMePrompty.Validator do
   defined using the Peri validation library.
   """
 
+  alias BeamMePrompty.Errors.ValidationError
+
   @doc """
   Validates input data against a schema.
 
@@ -19,8 +21,11 @@ defmodule BeamMePrompty.Validator do
   """
   def validate(schema, data) when is_map(schema) and is_map(data) do
     case Peri.validate(schema, data) do
-      {:ok, validated_data} -> {:ok, validated_data}
-      {:error, errors} -> {:error, format_errors(errors)}
+      {:ok, validated_data} ->
+        {:ok, validated_data}
+
+      {:error, errors} ->
+        {:error, ValidationError.exception(cause: format_errors(errors))}
     end
   end
 

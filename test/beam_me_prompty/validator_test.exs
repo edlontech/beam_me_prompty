@@ -31,9 +31,9 @@ defmodule BeamMePrompty.ValidatorTest do
       }
 
       assert {:error, errors} = Validator.validate(schema, data)
-      assert is_list(errors)
-      assert length(errors) > 0
-      assert Enum.any?(errors, &String.contains?(&1, "range"))
+      assert is_list(errors.cause)
+      assert length(errors.cause) > 0
+      assert Enum.any?(errors.cause, &String.contains?(&1, "range"))
     end
 
     test "handles required fields" do
@@ -48,8 +48,8 @@ defmodule BeamMePrompty.ValidatorTest do
       }
 
       assert {:error, errors} = Validator.validate(schema, data)
-      assert is_list(errors)
-      assert Enum.any?(errors, &String.contains?(&1, "required"))
+      assert is_list(errors.cause)
+      assert Enum.any?(errors.cause, &String.contains?(&1, "required"))
     end
 
     test "handles nested schemas" do
@@ -75,13 +75,13 @@ defmodule BeamMePrompty.ValidatorTest do
       }
 
       assert {:error, errors} = Validator.validate(schema, data)
-      assert is_list(errors)
+      assert is_list(errors.cause)
 
       # Check if we got errors
-      assert length(errors) > 0
+      assert length(errors.cause) > 0
 
       # Just make sure we got some error messages
-      assert Enum.all?(errors, fn error ->
+      assert Enum.all?(errors.cause, fn error ->
                is_binary(error) and String.length(error) > 0
              end)
     end

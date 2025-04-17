@@ -6,6 +6,7 @@ defmodule BeamMePrompty do
   LLM clients and executors.
   """
   alias BeamMePrompty.LLM.MessageParser
+  alias BeamMePrompty.Errors
 
   def execute(pipeline, input, opts \\ []) do
     executor = Keyword.get(opts, :executor, BeamMePrompty.DAG.Executor.InMemory)
@@ -43,7 +44,7 @@ defmodule BeamMePrompty do
            maybe_call_function(config, validated_input, validated_llm_result) do
       {:ok, final_result}
     else
-      {:error, reason} -> {:error, %{stage: stage.name, reason: reason}}
+      {:error, reason} -> {:error, Errors.to_class(reason)}
       result when is_map(result) -> {:ok, result}
     end
   end
@@ -57,7 +58,11 @@ defmodule BeamMePrompty do
           %{from: from_stage, select: select_path} when not is_nil(from_stage) ->
             case Map.get(dependency_results, from_stage) do
               nil ->
-                {:error, "Dependency result for stage '#{from_stage}' not found."}
+                {:error,
+                 Errors.ExecutionError.exception(
+                   step: :prepare_stage_input,
+                   cause: "Dependency result for stage '#{from_stage}' not found."
+                 )}
 
               from_result ->
                 selected_data =
@@ -75,16 +80,29 @@ defmodule BeamMePrompty do
             end
 
           _ ->
-            {:error, "Invalid :input configuration in stage config."}
+            {:error,
+             Errors.ExecutionError.exception(
+               step: :prepare_stage_input,
+               cause: "Invalid input source configuration."
+             )}
         end
       else
         {:ok, global_input}
       end
 
     case merged_input do
-      {:ok, map} when is_map(map) -> {:ok, map}
-      {:error, _} = error -> error
-      _ -> {:error, "Internal error: Input preparation resulted in unexpected format."}
+      {:ok, map} when is_map(map) ->
+        {:ok, map}
+
+      {:error, _} = error ->
+        error
+
+      _ ->
+        {:error,
+         Errors.ExecutionError.exception(
+           step: :prepare_stage_input,
+           cause: "Invalid input data format."
+         )}
     end
   end
 
@@ -101,8 +119,11 @@ defmodule BeamMePrompty do
       params = parse_params(config.params) || []
 
       case BeamMePrompty.LLM.completion(config.llm_client, messages, params) do
-        {:ok, result} -> {:ok, result}
-        {:error, reason} -> {:error, %{type: :llm_error, details: reason}}
+        {:ok, result} ->
+          {:ok, result}
+
+        {:error, err} ->
+          {:error, err}
       end
     else
       {:ok, %{}}
@@ -147,11 +168,11 @@ defmodule BeamMePrompty do
         rescue
           e ->
             {:error,
-             %{
-               type: :call_error,
-               function: "<anonymous>",
-               details: Exception.format(:error, e, __STACKTRACE__)
-             }}
+             Errors.ExecutionError.exception(
+               step: :call_function,
+               cause: "Failed to call anonymous function #{Exception.message(e)}",
+               stacktrace: __STACKTRACE__
+             )}
         end
 
       %{module: mod, function: fun_name, args: args, as: result_key} ->
@@ -162,15 +183,20 @@ defmodule BeamMePrompty do
         rescue
           e ->
             {:error,
-             %{
-               type: :call_error,
-               mfa: {mod, fun_name, length(args) + 1},
-               details: Exception.format(:error, e, __STACKTRACE__)
-             }}
+             Errors.ExecutionError.exception(
+               step: :call_function,
+               cause:
+                 "Failed to call function #{mod}.#{fun_name}/#{length(args) + 1}: #{Exception.message(e)}",
+               stacktrace: __STACKTRACE__
+             )}
         end
 
       _ ->
-        {:error, %{type: :invalid_config, details: "Invalid :call configuration"}}
+        {:error,
+         Errors.ExecutionError.exception(
+           step: :call_function,
+           cause: "Invalid function call configuration."
+         )}
     end
   end
 end
