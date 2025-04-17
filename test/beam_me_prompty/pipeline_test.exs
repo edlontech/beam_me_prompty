@@ -1,15 +1,11 @@
 defmodule BeamMePrompty.PipelineTest do
   use ExUnit.Case, async: true
 
+  import Hammox
+
   alias BeamMePrompty.TestPipeline
 
-  # Mock LLM client for testing
-  defmodule MockLLMClient do
-    def completion(_messages, _opts) do
-      # Return a mock response based on the messages
-      {:ok, %{"result" => "mock result", "analysis" => "mock analysis"}}
-    end
-  end
+  setup :verify_on_exit!
 
   describe "pipeline structure" do
     test "each pipeline has a name" do
@@ -31,19 +27,35 @@ defmodule BeamMePrompty.PipelineTest do
 
   describe "pipeline execution" do
     test "executes a simple pipeline" do
-      input = %{"text" => "test input"}
+      input = %{"text" => "what's this animal?"}
 
-      assert {:ok, results} =
-               BeamMePrompty.execute(TestPipeline.pipeline(), input, llm_client: MockLLMClient)
+      BeamMePrompty.FakeLlmClient
+      |> expect(:completion, fn messages, opts ->
+        assert Keyword.get(opts, :temperature) == 0.5
+        assert Keyword.get(opts, :max_tokens) == 100
+        assert Keyword.get(opts, :key) == "test-key"
 
-      # Verify results contain all stages
+        assert [
+                 user: "Process this input: what's this animal?",
+                 system: "You are a helpful assistant."
+               ] == messages
+
+        {:ok, %{"result" => "wassup"}}
+      end)
+      |> expect(:completion, fn messages, _opts ->
+        assert [user: "Analyze this further: wassup", system: "You are a helpful assistant."] ==
+                 messages
+
+        {:ok, %{"analysis" => "Yes, it's a platypus"}}
+      end)
+      |> expect(:completion, fn _messages, _opts ->
+        {:ok, %{"final_result" => "And it's Perry the Platypus!"}}
+      end)
+
+      assert {:ok, results} = BeamMePrompty.execute(TestPipeline.pipeline(), input)
+
       assert Map.has_key?(results, :first_stage)
       assert Map.has_key?(results, :second_stage)
-      assert Map.has_key?(results, :third_stage)
-
-      # Verify third stage processed the data correctly
-      third_stage_result = Map.get(results, :third_stage)
-      assert Map.has_key?(third_stage_result, :uppercase_result)
     end
   end
 end

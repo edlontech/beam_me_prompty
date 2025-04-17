@@ -22,7 +22,11 @@ defmodule BeamMePrompty.MixProject do
     [
       {:gen_state_machine, "~> 3.0"},
       {:hammox, "~> 0.7", only: :test},
-      {:peri, "~> 0.3"}
+      {:nimble_options, "~> 1.1"},
+      {:peri, "~> 0.3"},
+      {:plug, "~> 1.0", only: :test},
+      {:req, "~> 0.5"},
+      {:splode, "~> 0.2"}
     ]
   end
 

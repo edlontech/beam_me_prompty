@@ -2,11 +2,8 @@
   inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}"],
   line_length: 98,
   locals_without_parens: [
-    # Pipeline macros
     pipeline: 1,
     stage: 1,
-
-    # Stage configuration macros
     using: 1,
     with_params: 1,
     inputs: 1,

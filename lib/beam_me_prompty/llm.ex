@@ -6,8 +6,13 @@ defmodule BeamMePrompty.LLM do
   with different LLM providers (e.g., OpenAI, Google Gemini, local models).
   """
 
+  @type roles :: :system | :user | :assistant
+
   @typedoc "Represents a message in a conversation history."
-  @type message :: %{role: :system | :user | :assistant, content: String.t()}
+  @type message :: binary() | {roles(), binary()}
+
+  @typedoc "Represents the response from an LLM provider."
+  @type response :: binary() | map()
 
   @typedoc "Options passed to the completion function."
   @type completion_opts :: keyword()
@@ -23,7 +28,7 @@ defmodule BeamMePrompty.LLM do
   schema if requested via options.
   """
   @callback completion(messages :: [message()], opts :: completion_opts()) ::
-              {:ok, map()} | {:error, any()}
+              {:ok, response} | {:error, any()}
 
   @doc """
   A convenience function to call the `completion/2` callback on a specific client module.

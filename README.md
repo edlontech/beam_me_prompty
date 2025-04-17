@@ -1,81 +1,140 @@
 # BeamMePrompty
 
-**TODO: Add description**
+**BeamMePrompty** is an Elixir library for building and executing multi-stage pipelines of prompts against Large Language Models (LLMs). It provides a DSL to define pipeline stages, manage dependencies, validate inputs/outputs, and plug in custom LLM clients.
 
 ## Installation
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `beam_me_prompty` to your list of dependencies in `mix.exs`:
+Add `:beam_me_prompty` to your `mix.exs` dependencies:
 
 ```elixir
-def deps do
+defp deps do
   [
     {:beam_me_prompty, "~> 0.1.0"}
   ]
 end
 ```
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/beam_me_prompty>.
+Fetch and compile:
 
-# BeamMePrompty
+```bash
+mix deps.get
+mix compile
+```
 
-An Elixir DSL for building LLM orchestration pipelines.
+## Quick Start
 
-## Features
-
-- Define multi-stage LLM pipelines with a clean, declarative syntax
-- Configure different models for different stages
-- Pass data between pipeline stages
-- Define expected output schemas
-- Template-based prompt construction
-
-## Example
+Define a pipeline module:
 
 ```elixir
-defmodule PromptFlow do
+defmodule MyPipeline do
   use BeamMePrompty.Pipeline
 
-  pipeline "topic_extraction" do
-    stage :extraction do
-      using model: "gpt-4o-mini-2024-07-18"
-      with_params max_tokens: 2000, temperature: 0.05
-      
-      with_context do
-        workspace_context: @workspace_context,
-        transcript: @transcript
-      end
-      
+  pipeline "example_pipeline" do
+    # Optional: schema for the entire pipeline input
+    input_schema %{"text" => :string}
+
+    stage :extract_keywords do
+      using model: "gpt-4", llm_client: MyLlmClient
+      with_params max_tokens: 100, temperature: 0.2
+
       message :system, "You are a helpful assistant."
-      message :user, "Extract topics from this transcript."
-      
-      expect_output schema: %{
-        type: :object,
-        properties: %{
-          topics: %{
-            type: :array,
-            items: %{type: :string}
-          }
-        }
-      }
+      message :user, "Extract keywords from: {{input.text}}"
+
+      expect_output %{"keywords" => [:string]}
+    end
+
+    stage :summarize, depends_on: [:extract_keywords] do
+      using model: "gpt-4", llm_client: MyLlmClient
+      with_params max_tokens: 200
+
+      with_input from: :extract_keywords, select: "keywords"
+
+      message :system, "You are a helpful assistant."
+      message :user, "Summarize these keywords: {{input.selected_input}}"
+
+      expect_output %{"summary" => :string}
     end
   end
 end
 ```
 
-## Installation
-
-Add `beam_me_prompty` to your list of dependencies in `mix.exs`:
+Execute the pipeline:
 
 ```elixir
-def deps do
-  [
-    {:beam_me_prompty, "~> 0.1.0"}
-  ]
-end
+pipeline = MyPipeline.pipeline()
+input = %{"text" => "Elixir is a dynamic, functional language."}
+
+{:ok, results} = BeamMePrompty.execute(pipeline, input)
+IO.inspect(results)
+# %{extract_keywords: %{"keywords" => [...]}, summarize: %{"summary" => "..."}}
 ```
 
-## Documentation
+### Overriding the LLM client or executor
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc).
+```elixir
+{:ok, results} =
+  BeamMePrompty.execute(
+    pipeline,
+    input,
+    llm_client: FakeLlmClient,
+    executor: CustomExecutor
+  )
+```
+
+## Pipeline Example
+
+Below is a full example inspired by the test suite:
+
+```elixir
+defmodule BeamMePrompty.TestPipeline do
+  use BeamMePrompty.Pipeline
+
+  pipeline "simple_test" do
+    stage :first_stage do
+      using model: "test-model", llm_client: BeamMePrompty.FakeLlmClient
+      with_params max_tokens: 100, temperature: 0.5, key: {:env, "TEST_KEY"}
+
+      message :system, "You are a helpful assistant."
+      message :user, "Process this input: {{input.text}}"
+
+      expect_output %{"result" => :string}
+    end
+
+    stage :second_stage, depends_on: [:first_stage] do
+      using model: "test-model", llm_client: BeamMePrompty.FakeLlmClient
+      with_input from: :first_stage, select: "result"
+      with_params max_tokens: 100, temperature: 0.5
+
+      message :system, "You are a helpful assistant."
+      message :user, "Analyze this further: {{input.selected_input}}"
+
+      expect_output %{"analysis" => :string}
+    end
+
+    stage :third_stage, depends_on: [:first_stage, :second_stage] do
+      using model: "test-model", llm_client: BeamMePrompty.FakeLlmClient
+      with_input from: :second_stage, select: "analysis"
+      with_params max_tokens: 100, temperature: 0.5
+
+      message :system, "You are a helpful assistant."
+      message :user, "Boink Boink"
+
+      call fn _stage_input, llm_output ->
+        {:ok, "Echoing: #{inspect(llm_output)}"}
+      end
+
+      expect_output %{"final_result" => :string}
+    end
+  end
+end
+
+# Execute:
+pipeline = BeamMePrompty.TestPipeline.pipeline()
+input = %{"text" => "what's this animal?"}
+{:ok, results} = BeamMePrompty.execute(pipeline, input)
+IO.inspect(results)
+```
+
+## Contributing
+
+Contributions and suggestions are welcome! Please open issues or submit pull requests.

@@ -26,10 +26,7 @@ defmodule BeamMePrompty.Validator do
 
   def validate(nil, data) when is_map(data), do: {:ok, data}
 
-  def validate(schema, data) do
-    dbg(schema, label: :here)
-    {:error, "Invalid input data format: #{inspect(data |> dbg())}"}
-  end
+  def validate(_schema, data), do: {:error, "Invalid input data format: #{inspect(data)}"}
 
   defp format_errors(errors) when is_list(errors) do
     Enum.map(errors, fn error ->

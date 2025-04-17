@@ -73,19 +73,25 @@ defmodule BeamMePrompty.Pipeline do
       @pipeline_name unquote(name)
       @pipeline_input_schema unquote(Macro.escape(Keyword.get(opts, :input_schema)))
 
-      # Process the block to extract stages
       unquote(block)
-
-      # This will be checked in __before_compile__ to ensure at least one stage is defined
     end
   end
 
   @doc """
   Defines an input schema for a pipeline.
   """
+
   defmacro input_schema(schema) do
     quote do
-      %{input_schema: unquote(Macro.escape(schema))}
+      @current_stage_config %{input_schema: unquote(Macro.escape(schema))}
+    end
+  end
+
+  defmacro expect_output(schema) do
+    expanded_schema = Macro.expand(schema, __ENV__)
+
+    quote do
+      @current_stage_config %{output_schema: unquote(expanded_schema)}
     end
   end
 
@@ -97,13 +103,34 @@ defmodule BeamMePrompty.Pipeline do
   """
   defmacro stage(name, opts \\ [], do: block) do
     quote do
-      stage_def = %{
-        name: unquote(name),
-        depends_on: unquote(Macro.escape(Keyword.get(opts, :depends_on, []))),
-        config: unquote(Macro.escape(extract_stage_config(block)))
-      }
+      Module.register_attribute(__MODULE__, :current_stage_config, accumulate: true)
 
-      @pipeline_stages stage_def
+      unquote(block)
+
+      # Combine all the collected config items into a single map
+      config =
+        @current_stage_config
+        |> Enum.reduce(%{}, fn item, acc ->
+          Map.merge(acc, item, fn k, v1, v2 ->
+            # Special handling for messages to accumulate them in a list
+            if k == :messages do
+              v1_messages = List.wrap(v1)
+              v2_messages = List.wrap(v2)
+              v1_messages ++ v2_messages
+            else
+              # For other keys, newer value overwrites
+              v2
+            end
+          end)
+        end)
+
+      Module.delete_attribute(__MODULE__, :current_stage_config)
+
+      @pipeline_stages %{
+        name: unquote(name),
+        depends_on: unquote(Keyword.get(opts, :depends_on, [])),
+        config: config
+      }
     end
   end
 
@@ -111,8 +138,12 @@ defmodule BeamMePrompty.Pipeline do
   Specifies which LLM model to use for a stage.
   """
   defmacro using(opts) do
-    quote do
-      %{model: unquote(opts[:model]), llm_client: unquote(opts[:llm_client])}
+    quote bind_quoted: [opts: opts] do
+      @current_stage_config %{
+        model: opts[:model],
+        llm_client: Macro.expand(opts[:llm_client], __ENV__),
+        settings: opts[:settings]
+      }
     end
   end
 
@@ -120,18 +151,8 @@ defmodule BeamMePrompty.Pipeline do
   Sets parameters for the LLM call.
   """
   defmacro with_params(opts) do
-    quote do
-      %{params: unquote(opts)}
-    end
-  end
-
-  @doc """
-  Defines the input schema for a stage, similar to Ecto schemas.
-  The actual values will be injected at runtime.
-  """
-  defmacro inputs(schema) do
-    quote do
-      %{input_schema: unquote(Macro.escape(schema))}
+    quote bind_quoted: [opts: opts] do
+      @current_stage_config %{params: opts}
     end
   end
 
@@ -143,11 +164,14 @@ defmodule BeamMePrompty.Pipeline do
     * `:select` - The key or path to select from the stage's result
   """
   defmacro with_input(opts) do
-    quote do
-      %{
+    from = opts[:from]
+    select = opts[:select]
+
+    quote bind_quoted: [from: from, select: select] do
+      @current_stage_config %{
         input: %{
-          from: unquote(opts[:from]),
-          select: unquote(opts[:select])
+          from: from,
+          select: select
         }
       }
     end
@@ -157,159 +181,41 @@ defmodule BeamMePrompty.Pipeline do
   Adds a message to the prompt sequence.
   """
   defmacro message(role, content) do
-    quote do
-      %{
-        message: %{
-          role: unquote(role),
-          content: unquote(content)
-        }
-      }
+    quote bind_quoted: [role: role, content: content] do
+      message = %{role: role, content: content}
+      @current_stage_config %{messages: message}
     end
   end
 
-  @doc """
-  Defines the expected output schema.
-  """
-  defmacro expect_output(schema) do
-    quote do
-      %{output_schema: unquote(schema)}
-    end
-  end
+  defmacro call(opts) when is_list(opts) do
+    module_ast = Keyword.get(opts, :module)
+    expanded_module = Macro.expand(module_ast, __ENV__)
 
-  defmacro call(fun, opts) when is_function(fun) do
-    quote do
-      %{
+    quote bind_quoted: [module: expanded_module, opts: opts] do
+      @current_stage_config %{
         call: %{
-          function: unquote(Macro.escape(fun)),
-          as: unquote(opts[:as])
+          module: module,
+          function: opts[:function],
+          args: opts[:args] || [],
+          as: opts[:as]
         }
       }
     end
   end
 
-  defmacro call(opts) do
+  defmacro call(fun) do
+    fun_name = :"call_function_#{:erlang.unique_integer([:positive])}"
+
     quote do
-      %{
-        call: %{
-          module: unquote(opts[:module]),
-          function: unquote(opts[:function]),
-          args: unquote(opts[:args] || []),
-          as: unquote(opts[:as])
-        }
-      }
-    end
-  end
-
-  @doc """
-  Helper function to extract and merge stage configurations from the AST block
-  generated by the stage's `do` block.
-  """
-  def extract_stage_config({:__block__, _, expressions}) do
-    # Convert AST expressions to configuration maps
-    config_maps = Enum.map(expressions, &eval_stage_config_expr/1)
-
-    # Merge the configuration maps
-    Enum.reduce(config_maps, %{messages: []}, fn config_map, acc_config ->
-      if message = Map.get(config_map, :message) do
-        messages = acc_config.messages ++ [message]
-
-        Map.merge(acc_config, Map.delete(config_map, :message))
-        |> Map.put(:messages, messages)
-      else
-        Map.merge(acc_config, config_map)
+      def unquote(fun_name)(arg1, arg2) do
+        unquote(fun).(arg1, arg2)
       end
-    end)
-  end
 
-  # Handle single expression blocks (not wrapped in a block)
-  def extract_stage_config(expr) do
-    config_map = eval_stage_config_expr(expr)
-
-    if message = Map.get(config_map, :message) do
-      %{messages: [message]}
-    else
-      config_map
-    end
-  end
-
-  # Evaluate a stage configuration expression from the AST
-  defp eval_stage_config_expr({name, _, args}) do
-    case {name, args} do
-      {:using, [opts]} ->
-        %{model: Keyword.get(opts, :model), llm_client: Keyword.get(opts, :llm_client)}
-
-      {:with_params, [opts]} ->
-        %{params: opts}
-
-      {:inputs, [schema]} ->
-        %{input_schema: schema}
-
-      {:with_input, [opts]} ->
-        %{input: %{from: Keyword.get(opts, :from), select: Keyword.get(opts, :select)}}
-
-      {:message, [role, content]} ->
-        %{message: %{role: role, content: content}}
-
-      {:expect_output, [schema]} ->
-        %{output_schema: schema}
-
-      {:call, [fun, opts]} when is_function(fun) ->
-        %{call: %{function: fun, as: Keyword.get(opts, :as)}}
-
-      {:call, [opts]} ->
-        %{
-          call: %{
-            module: Keyword.get(opts, :module),
-            function: Keyword.get(opts, :function),
-            args: Keyword.get(opts, :args, []),
-            as: Keyword.get(opts, :as)
-          }
+      @current_stage_config %{
+        call: %{
+          function: &(__MODULE__.unquote(fun_name) / 2)
         }
-
-      _ ->
-        %{}
-    end
-  end
-
-  # Handle any other expressions
-  defp eval_stage_config_expr(_), do: %{}
-
-  # Helper function to evaluate schema AST into actual maps
-  defp eval_schema({:%{}, _, pairs}) when is_list(pairs) do
-    # Convert AST map representation to actual map
-    Map.new(pairs)
-  end
-
-  defp eval_schema({:{}, _, [{:%{}, _, pairs}]}) when is_list(pairs) do
-    # Handle nested AST representation
-    Map.new(pairs)
-  end
-
-  defp eval_schema(schema) when is_map(schema) do
-    # Already a map, return as is
-    schema
-  end
-
-  defp eval_schema(other) do
-    # For any other form, return as is and let validation handle it
-    other
-  end
-
-  @doc """
-  Helper function to extract stages from the pipeline block.
-  This is no longer used with the new implementation, but kept for compatibility.
-  """
-  def extract_stages(block) do
-    # For testing purposes, we need to handle both actual stage definitions
-    # and raw AST blocks
-    case block do
-      %{name: _name, config: _config} = stage ->
-        # If it's already a properly formatted stage, return it directly
-        stage
-
-      _ ->
-        # Otherwise, return the raw block for further processing
-        %{raw_stages: block}
+      }
     end
   end
 

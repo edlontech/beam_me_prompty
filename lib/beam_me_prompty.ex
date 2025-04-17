@@ -1,39 +1,43 @@
 defmodule BeamMePrompty do
-  @doc """
-  Executes a pipeline with the given input.
-
-  Options:
-    - :executor - The DAG executor to use (defaults to BeamMePrompty.DAG.Executor.InMemory)
-
-  Returns {:ok, results} or {:error, reason}
+  @moduledoc """
+  Main entrypoint for executing defined BeamMePrompty pipelines.
+  Provides the `execute/3` function to orchestrate multi-stage LLM prompts,
+  handling input/output validation, dependency resolution, and customizable
+  LLM clients and executors.
   """
+  alias BeamMePrompty.LLM.MessageParser
+
   def execute(pipeline, input, opts \\ []) do
     executor = Keyword.get(opts, :executor, BeamMePrompty.DAG.Executor.InMemory)
-    # Extract llm_client from opts
-    llm_client = Keyword.get(opts, :llm_client)
+    override_llm = Keyword.get(opts, :llm_client)
     dag = BeamMePrompty.DAG.build(pipeline.stages)
 
-    # Create initial execution context
     initial_context = %{
       global_input: input,
-      llm_client: llm_client
-      # Add other execution-wide options here if needed
+      llm_client: override_llm
     }
 
     BeamMePrompty.DAG.execute(dag, initial_context, &execute_stage(&1, &2), executor)
   end
 
-  # execute_stage now receives the full execution context
   defp execute_stage(stage, exec_context) do
-    config = stage.config |> dbg()
+    config = stage.config
+
+    config =
+      Map.replace_lazy(config, :llm_client, fn client ->
+        case exec_context.llm_client do
+          nil -> client
+          exec_client -> exec_client
+        end
+      end)
+
     global_input = exec_context.global_input
     dependency_results = exec_context.dependency_results || %{}
-    llm_client = exec_context.llm_client
 
     with {:ok, prepared_input} <-
-           prepare_stage_input(config, global_input, dependency_results) |> dbg(),
+           prepare_stage_input(config, global_input, dependency_results),
          {:ok, validated_input} <- validate_input(config, prepared_input),
-         {:ok, llm_result} <- maybe_call_llm(config, validated_input, llm_client),
+         {:ok, llm_result} <- maybe_call_llm(config, validated_input),
          {:ok, validated_llm_result} <- validate_output(config, llm_result),
          {:ok, final_result} <-
            maybe_call_function(config, validated_input, validated_llm_result) do
@@ -45,8 +49,6 @@ defmodule BeamMePrompty do
   end
 
   defp prepare_stage_input(config, global_input, dependency_results) do
-    base_input = global_input
-
     input_source = Map.get(config, :input)
 
     merged_input =
@@ -65,15 +67,10 @@ defmodule BeamMePrompty do
                     from_result
                   end
 
-                # Decide how to merge: If selected_data is a map, merge it. Otherwise, maybe put it under a key?
-                # Let's assume for now it replaces the base_input if select is used.
-                # A more robust strategy might be needed.
                 if is_map(selected_data) do
-                  {:ok, Map.merge(base_input, selected_data)}
+                  {:ok, Map.merge(global_input, selected_data)}
                 else
-                  # If selected data is not a map, put it under a default key or require an :as option?
-                  # For now, let's put it under :selected_input key.
-                  {:ok, Map.put(base_input, :selected_input, selected_data)}
+                  {:ok, Map.put(global_input, "selected_input", selected_data)}
                 end
             end
 
@@ -81,11 +78,9 @@ defmodule BeamMePrompty do
             {:error, "Invalid :input configuration in stage config."}
         end
       else
-        # No specific input source, use global input directly
-        {:ok, base_input}
+        {:ok, global_input}
       end
 
-    # Ensure the result is always {:ok, map} or {:error, reason}
     case merged_input do
       {:ok, map} when is_map(map) -> {:ok, map}
       {:error, _} = error -> error
@@ -94,71 +89,61 @@ defmodule BeamMePrompty do
   end
 
   defp validate_input(config, input) do
-    case Map.get(config, :input_schema) |> dbg() do
+    case Map.get(config, :input_schema) do
       nil -> {:ok, input}
       schema -> BeamMePrompty.Validator.validate(schema, input)
     end
   end
 
-  # Add llm_client parameter
-  defp maybe_call_llm(config, _input, llm_client) do
-    # Use the passed llm_client instead of config.llm_client
-    if config.model && llm_client do
-      # TODO: Implement templating for message content using input data
-      messages = config.messages || []
-      params = config.params || []
+  defp maybe_call_llm(config, input) do
+    if config.model && config.llm_client do
+      messages = MessageParser.parse(config.messages, input) || []
+      params = parse_params(config.params) || []
 
-      case BeamMePrompty.LLM.completion(llm_client, messages, params) do
+      case BeamMePrompty.LLM.completion(config.llm_client, messages, params) do
         {:ok, result} -> {:ok, result}
         {:error, reason} -> {:error, %{type: :llm_error, details: reason}}
       end
     else
-      # No LLM call needed for this stage, return input as is for potential 'call' step
-      # Return empty map if no LLM call, adjust if input should pass through
       {:ok, %{}}
     end
   end
 
-  defp validate_output(config, llm_result) do
-    schema = Map.get(config, :output_schema)
+  defp parse_params(params) do
+    Keyword.new(params, fn
+      {key, {:env, value}} ->
+        {key, System.get_env(value)}
 
-    case schema do
+      {key, value} ->
+        {key, value}
+    end)
+  end
+
+  defp validate_output(config, llm_result) do
+    case Map.get(config, :output_schema) do
       nil ->
         {:ok, llm_result}
 
       schema when is_map(schema) and is_map(llm_result) ->
-        # Filter the result map to only include keys defined in the schema
         schema_keys = Map.keys(schema)
         filtered_result = Map.take(llm_result, schema_keys)
 
-        # Validate the filtered data
         case BeamMePrompty.Validator.validate(schema, filtered_result) do
           {:ok, _validated_data} -> {:ok, llm_result}
           {:error, _reason} = error -> error
         end
-
-      # If we still have AST, convert it (this should be rare now)
-      {:%{}, _meta, pairs} when is_list(pairs) ->
-        actual_schema = Map.new(pairs)
-        validate_output(%{config | output_schema: actual_schema}, llm_result)
-
-      _ ->
-        BeamMePrompty.Validator.validate(schema, llm_result)
     end
   end
 
   defp maybe_call_function(config, stage_input, llm_result) do
     case Map.get(config, :call) do
       nil ->
-        # No function call, return the LLM result (or empty map if no LLM)
         {:ok, llm_result}
 
-      %{function: fun, as: result_key} when is_function(fun) ->
+      %{function: fun} when is_function(fun) ->
         try do
-          # Pass both stage input and llm result to the function
           call_result = fun.(stage_input, llm_result)
-          # Merge the function result into the llm_result map under the specified key
-          {:ok, Map.put(llm_result, result_key, call_result)}
+          {:ok, Map.put(llm_result, :tool_result, call_result)}
         rescue
           e ->
             {:error,
@@ -170,19 +155,16 @@ defmodule BeamMePrompty do
         end
 
       %{module: mod, function: fun_name, args: args, as: result_key} ->
-        full_args = [stage_input, llm_result | args]
-
         try do
-          # Prepend stage_input and llm_result to the static args
-          call_result = apply(mod, fun_name, full_args)
-          # Merge the function result into the llm_result map under the specified key
+          selected_value = stage_input[:selected_input]
+          call_result = apply(mod, fun_name, [selected_value | args])
           {:ok, Map.put(llm_result, result_key, call_result)}
         rescue
           e ->
             {:error,
              %{
                type: :call_error,
-               mfa: {mod, fun_name, length(full_args)},
+               mfa: {mod, fun_name, length(args) + 1},
                details: Exception.format(:error, e, __STACKTRACE__)
              }}
         end

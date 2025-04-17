@@ -34,16 +34,13 @@ defmodule BeamMePrompty.DAG do
 
       alias BeamMePrompty.DAG
 
-      # Import helper functions
       import BeamMePrompty.DAG, only: [build: 1, validate: 1]
 
-      # Default implementations that can be overridden
       @impl true
       def execute_node(node, input, executor_fn) do
         executor_fn.(node, input)
       end
 
-      # Allow overriding the default implementations
       defoverridable execute_node: 3
     end
   end
@@ -58,7 +55,6 @@ defmodule BeamMePrompty.DAG do
 
   Returns {:ok, results} or {:error, reason}
   """
-  # Changed `input` to `initial_context`
   @callback execute(dag :: map(), initial_context :: map(), node_executor :: function()) ::
               {:ok, map()} | {:error, any()}
 
@@ -84,7 +80,6 @@ defmodule BeamMePrompty.DAG do
   - :roots - List of stage names with no dependencies
   """
   def build(stages) do
-    # Initialize the DAG structure
     dag = %{
       nodes: %{},
       edges: %{},
@@ -137,8 +132,6 @@ defmodule BeamMePrompty.DAG do
   Returns :ok if valid, {:error, reason} otherwise.
   """
   def validate(dag) do
-    # Implementation of cycle detection algorithm
-    # For each node, perform a depth-first traversal and check for cycles
     visited = MapSet.new()
     temp_visited = MapSet.new()
 
@@ -161,18 +154,13 @@ defmodule BeamMePrompty.DAG do
   end
 
   defp has_cycle?(dag, node, visited, temp_visited) do
-    # If node is in temp_visited, we have a cycle
     if MapSet.member?(temp_visited, node) do
       {:error, "Cycle detected involving node #{node}"}
     else
-      # If node is already visited, we're good
       if MapSet.member?(visited, node) do
         {:ok, visited}
       else
-        # Mark node as temporarily visited
         temp_visited = MapSet.put(temp_visited, node)
-
-        # Visit all neighbors
         dependencies = Map.get(dag.edges, node, [])
 
         result =
@@ -185,7 +173,6 @@ defmodule BeamMePrompty.DAG do
 
         case result do
           {:ok, new_visited} ->
-            # Mark node as visited and remove from temp_visited
             new_visited = MapSet.put(new_visited, node)
             {:ok, new_visited}
 
@@ -207,7 +194,6 @@ defmodule BeamMePrompty.DAG do
 
   Returns {:ok, results} or {:error, reason}
   """
-  # Changed `input` to `initial_context`
   def execute(dag, initial_context, execute_fn, executor \\ BeamMePrompty.DAG.Executor.InMemory) do
     executor.execute(dag, initial_context, execute_fn)
   end
