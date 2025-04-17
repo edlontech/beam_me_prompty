@@ -1,3 +1,5 @@
+![31BBn9I.th.png](https://iili.io/31BBn9I.th.png)
+
 # BeamMePrompty
 
 **BeamMePrompty** is an Elixir library for building and executing multi-stage pipelines of prompts against Large Language Models (LLMs). It provides a DSL to define pipeline stages, manage dependencies, validate inputs/outputs, and plug in custom LLM clients.
