@@ -1,9 +1,4 @@
-defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
-  @moduledoc """
-  Defines and validates configuration options for the Google Gemini LLM adapter.
-  Uses NimbleOptions to enforce required parameters (e.g., API key, model) and
-  acceptable types for generation settings like temperature, top_k, and top_p.
-  """
+defmodule BeamMePrompty.LLM.AnthropicOpts do
   @schema NimbleOptions.new!(
             max_output_tokens: [
               type: :non_neg_integer,
@@ -14,6 +9,15 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
               doc: """
               Controls the randomness of the output. Use higher values for more creative responses, and lower values for more deterministic responses.
               """
+            ],
+            key: [
+              type: :string,
+              doc: "Anthropic API key."
+            ],
+            version: [
+              type: :string,
+              doc: "Anthropic API Version",
+              default: "2023-06-01"
             ],
             top_p: [
               type: :float,
@@ -29,14 +33,23 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
               Tokens are further filtered based on topP with the final token selected using temperature sampling.
               """
             ],
-            key: [
-              type: :string,
-              doc: "Gemini API key."
+            thinking: [
+              type: :boolean,
+              doc: """
+              When enabled, responses include thinking content blocks showing Claude's thinking process before the final answer. Requires a minimum budget of 1,024 tokens and counts towards your max_tokens limit.
+              """
+            ],
+            thinking_budget_tokens: [
+              type: :non_neg_integer,
+              default: 1024,
+              doc: """
+              The amount of tokens reserved for thinking
+              """
             ],
             model: [
               type: :string,
               doc: "Which model to use",
-              default: "gemini-2.0-flash"
+              default: "claude-3-7-sonnet-20250219"
             ],
             plug: [
               type: {:tuple, [:atom, :atom]},

@@ -75,7 +75,7 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
       [maybe_system | messages] ->
         [text_content(maybe_system, :system) | Enum.map(messages, &text_content/1)]
     end
-    |> Enum.split_with(fn %{role: role} -> role == :system end)
+    |> Enum.split_with(fn %{role: role} -> role == [:system, "system"] end)
     |> then(fn {system_messages, other_messages} ->
       merged_system_message =
         %{
