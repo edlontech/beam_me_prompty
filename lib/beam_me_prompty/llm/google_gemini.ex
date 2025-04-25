@@ -28,9 +28,21 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
         top_k: opts[:top_k],
         top_p: opts[:top_p],
         temperature: opts[:temperature],
-        max_output_tokens: opts[:max_output_tokens]
+        max_output_tokens: opts[:max_output_tokens],
+        thinking_budget: opts[:thinking_budget],
+        response_schema: opts[:response_schema]
       }
       |> Map.reject(fn {_k, v} -> is_nil(v) end)
+
+    generation_config =
+      if opts[:response_schema] do
+        %{
+          generation_config
+          | response_mime_type: "application/json"
+        }
+      else
+        generation_config
+      end
 
     payload = Map.merge(prepare_messages(messages), %{generation_config: generation_config})
 

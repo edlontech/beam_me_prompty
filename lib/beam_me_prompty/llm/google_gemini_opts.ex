@@ -38,6 +38,18 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
               doc: "Which model to use",
               default: "gemini-2.0-flash"
             ],
+            response_schema: [
+              type: :map,
+              doc: """
+              OpenAPI 3.0 schema for the response, if filled, will enable the structured response feature
+              """
+            ],
+            thinking_budget: [
+              type: :non_neg_integer,
+              doc: """
+              The maximum number of tokens to use for the thinking budget. Minimum of 1024 tokens.
+              """
+            ],
             plug: [
               type: {:tuple, [:atom, :atom]},
               doc: "Plugins to use for the request. This is useful for testing."
