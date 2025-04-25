@@ -146,11 +146,8 @@ defmodule BeamMePrompty do
         {:ok, llm_result}
 
       schema when is_map(schema) and is_map(llm_result) ->
-        schema_keys = Map.keys(schema)
-        filtered_result = Map.take(llm_result, schema_keys)
-
-        case BeamMePrompty.Validator.validate(schema, filtered_result) do
-          {:ok, _validated_data} -> {:ok, llm_result}
+        case BeamMePrompty.Validator.validate(schema, llm_result) do
+          {:ok, validated_data} -> {:ok, validated_data}
           {:error, _reason} = error -> error
         end
     end
@@ -164,7 +161,7 @@ defmodule BeamMePrompty do
       %{function: fun} when is_function(fun) ->
         try do
           call_result = fun.(stage_input, llm_result)
-          {:ok, Map.put(llm_result, :tool_result, call_result)}
+          {:ok, call_result}
         rescue
           e ->
             {:error,
@@ -179,7 +176,12 @@ defmodule BeamMePrompty do
         try do
           selected_value = stage_input[:selected_input]
           call_result = apply(mod, fun_name, [selected_value | args])
-          {:ok, Map.put(llm_result, result_key, call_result)}
+
+          if result_key do
+            {:ok, Map.put(%{}, result_key, call_result)}
+          else
+            {:ok, call_result}
+          end
         rescue
           e ->
             {:error,

@@ -46,16 +46,21 @@ defmodule BeamMePrompty.AgentTest do
         assert [user: "Analyze this further: wassup", system: "You are a helpful assistant."] ==
                  messages
 
-        {:ok, %{"analysis" => "Yes, it's a platypus"}}
+        {:ok, "Yes, it's a platypus"}
       end)
       |> expect(:completion, fn _messages, _opts ->
-        {:ok, %{"final_result" => "And it's Perry the Platypus!"}}
+        {:ok, "And it's Perry the Platypus!"}
       end)
 
       assert {:ok, results} = BeamMePrompty.execute(TestAgent.agent(), input)
 
       assert Map.has_key?(results, :first_stage)
       assert Map.has_key?(results, :second_stage)
+      assert Map.has_key?(results, :third_stage)
+
+      assert results.first_stage == %{result: "wassup"}
+      assert results.second_stage == "Yes, it's a platypus"
+      assert results.third_stage == {:ok, "Echoing: \"And it's Perry the Platypus!\""}
     end
   end
 end
