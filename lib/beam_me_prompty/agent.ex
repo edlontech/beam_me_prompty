@@ -1,16 +1,16 @@
-defmodule BeamMePrompty.Pipeline do
+defmodule BeamMePrompty.Agent do
   @moduledoc """
-  A DSL for building LLM orchestration pipelines.
+  A DSL for building LLM orchestration agents.
 
-  This module provides macros for defining pipelines with multiple stages,
+  This module provides macros for defining agents with multiple stages,
   each configured with specific LLM models, parameters, and prompt templates.
 
   ## Example
 
       defmodule PromptFlow do
-        use BeamMePrompty.Pipeline
+        use BeamMePrompty.Agent
 
-        pipeline "topic_extraction" do
+        agent "topic_extraction" do
           stage :extraction do
             using model: "gpt-4o-mini-2024-07-18"
             with_params max_tokens: 2000, temperature: 0.05
@@ -23,32 +23,32 @@ defmodule BeamMePrompty.Pipeline do
 
   ## Execution
 
-  Pipelines are executed as a Directed Acyclic Graph (DAG), where each stage
+  Agents are executed as a Directed Acyclic Graph (DAG), where each stage
   can depend on the results of previous stages. The execution order is determined
   by the dependencies between stages, allowing for parallel execution when possible.
 
   ```elixir
-  # Execute a pipeline with input data
+  # Execute a agent with input data
   PromptFlow.execute("topic_extraction", %{text: "Some text to analyze"})
   ```
   """
 
   @doc """
-  When used, defines the necessary macros for the pipeline DSL.
+  When used, defines the necessary macros for the agent DSL.
   """
   defmacro __using__(_opts) do
     quote do
-      import BeamMePrompty.Pipeline
+      import BeamMePrompty.Agent
 
       alias BeamMePrompty.DAG
       alias BeamMePrompty.DAG.Executor
       alias BeamMePrompty.Validator
 
-      Module.register_attribute(__MODULE__, :pipeline_name, accumulate: false)
-      Module.register_attribute(__MODULE__, :pipeline_stages, accumulate: true)
-      Module.register_attribute(__MODULE__, :pipeline_input_schema, accumulate: false)
+      Module.register_attribute(__MODULE__, :agent_name, accumulate: false)
+      Module.register_attribute(__MODULE__, :agent_stages, accumulate: true)
+      Module.register_attribute(__MODULE__, :agent_input_schema, accumulate: false)
 
-      @before_compile BeamMePrompty.Pipeline
+      @before_compile BeamMePrompty.Agent
 
       defdelegate build_dag(stages), to: BeamMePrompty.DAG, as: :build
       defdelegate validate_dag(dag), to: BeamMePrompty.DAG, as: :validate
@@ -60,25 +60,25 @@ defmodule BeamMePrompty.Pipeline do
   end
 
   @doc """
-  Defines a pipeline with the given name and block of stages.
+  Defines a agent with the given name and block of stages.
 
-  Only one pipeline is allowed per module, and at least one stage is required.
+  Only one agent is allowed per module, and at least one stage is required.
   """
-  defmacro pipeline(name, opts \\ [], do: block) do
+  defmacro agent(name, opts \\ [], do: block) do
     quote do
-      if Module.get_attribute(__MODULE__, :pipeline_name) != nil do
-        raise "Only one pipeline is allowed per module. Found multiple pipeline definitions."
+      if Module.get_attribute(__MODULE__, :agent_name) != nil do
+        raise "Only one agent is allowed per module. Found multiple agent definitions."
       end
 
-      @pipeline_name unquote(name)
-      @pipeline_input_schema unquote(Macro.escape(Keyword.get(opts, :input_schema)))
+      @agent_name unquote(name)
+      @agent_input_schema unquote(Macro.escape(Keyword.get(opts, :input_schema)))
 
       unquote(block)
     end
   end
 
   @doc """
-  Defines an input schema for a pipeline.
+  Defines an input schema for a agent.
   """
 
   defmacro input_schema(schema) do
@@ -96,7 +96,7 @@ defmodule BeamMePrompty.Pipeline do
   end
 
   @doc """
-  Defines a stage within a pipeline with a name and configuration block.
+  Defines a stage within a agent with a name and configuration block.
 
   ## Options
     * `:depends_on` - List of stage names this stage depends on
@@ -126,7 +126,7 @@ defmodule BeamMePrompty.Pipeline do
 
       Module.delete_attribute(__MODULE__, :current_stage_config)
 
-      @pipeline_stages %{
+      @agent_stages %{
         name: unquote(name),
         depends_on: unquote(Keyword.get(opts, :depends_on, [])),
         config: config
@@ -220,31 +220,31 @@ defmodule BeamMePrompty.Pipeline do
   end
 
   @doc """
-  Generates helper functions for accessing the defined pipeline.
+  Generates helper functions for accessing the defined agent.
   """
   defmacro __before_compile__(env) do
-    pipeline_name = Module.get_attribute(env.module, :pipeline_name)
-    pipeline_stages = Module.get_attribute(env.module, :pipeline_stages)
-    pipeline_input_schema = Module.get_attribute(env.module, :pipeline_input_schema)
+    agent_name = Module.get_attribute(env.module, :agent_name)
+    agent_stages = Module.get_attribute(env.module, :agent_stages)
+    agent_input_schema = Module.get_attribute(env.module, :agent_input_schema)
 
-    if pipeline_name == nil do
-      raise "No pipeline defined. Each module using BeamMePrompty.Pipeline must define exactly one pipeline."
+    if agent_name == nil do
+      raise "No agent defined. Each module using BeamMePrompty.Agent must define exactly one agent."
     end
 
-    if pipeline_stages == nil || Enum.empty?(pipeline_stages) do
-      raise "Pipeline '#{pipeline_name}' must contain at least one stage."
+    if agent_stages == nil || Enum.empty?(agent_stages) do
+      raise "Agent '#{agent_name}' must contain at least one stage."
     end
 
     quote do
-      def pipeline_name do
-        unquote(pipeline_name)
+      def agent_name do
+        unquote(agent_name)
       end
 
-      def pipeline do
+      def agent do
         %{
-          name: unquote(pipeline_name),
-          stages: unquote(Macro.escape(pipeline_stages)),
-          input_schema: unquote(Macro.escape(pipeline_input_schema))
+          name: unquote(agent_name),
+          stages: unquote(Macro.escape(agent_stages)),
+          input_schema: unquote(Macro.escape(agent_input_schema))
         }
       end
     end

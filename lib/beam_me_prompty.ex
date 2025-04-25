@@ -1,6 +1,6 @@
 defmodule BeamMePrompty do
   @moduledoc """
-  Main entrypoint for executing defined BeamMePrompty pipelines.
+  Main entrypoint for executing defined BeamMePrompty agents.
   Provides the `execute/3` function to orchestrate multi-stage LLM prompts,
   handling input/output validation, dependency resolution, and customizable
   LLM clients and executors.
@@ -8,10 +8,10 @@ defmodule BeamMePrompty do
   alias BeamMePrompty.LLM.MessageParser
   alias BeamMePrompty.Errors
 
-  def execute(pipeline, input, opts \\ []) do
+  def execute(agent, input, opts \\ []) do
     executor = Keyword.get(opts, :executor, BeamMePrompty.DAG.Executor.InMemory)
     override_llm = Keyword.get(opts, :llm_client)
-    dag = BeamMePrompty.DAG.build(pipeline.stages)
+    dag = BeamMePrompty.DAG.build(agent.stages)
 
     initial_context = %{
       global_input: input,

@@ -2,7 +2,7 @@
   inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}"],
   line_length: 98,
   locals_without_parens: [
-    pipeline: 1,
+    agent: 1,
     stage: 1,
     using: 1,
     with_params: 1,
@@ -15,7 +15,7 @@
   ],
   export: [
     locals_without_parens: [
-      pipeline: 1,
+      agent: 1,
       stage: 1,
       using: 1,
       with_params: 1,

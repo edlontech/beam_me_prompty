@@ -1,32 +1,32 @@
-defmodule BeamMePrompty.PipelineTest do
+defmodule BeamMePrompty.AgentTest do
   use ExUnit.Case, async: true
 
   import Hammox
 
-  alias BeamMePrompty.TestPipeline
+  alias BeamMePrompty.TestAgent
 
   setup :verify_on_exit!
 
-  describe "pipeline structure" do
-    test "each pipeline has a name" do
-      assert TestPipeline.pipeline_name() == "simple_test"
+  describe "agent structure" do
+    test "each agent has a name" do
+      assert TestAgent.agent_name() == "simple_test"
     end
 
-    test "pipeline has stages" do
-      pipeline = TestPipeline.pipeline()
-      assert is_list(pipeline.stages)
-      assert length(pipeline.stages) == 3
+    test "agent has stages" do
+      agent = TestAgent.agent()
+      assert is_list(agent.stages)
+      assert length(agent.stages) == 3
 
       # Check stage names
-      stage_names = Enum.map(pipeline.stages, & &1.name)
+      stage_names = Enum.map(agent.stages, & &1.name)
       assert :first_stage in stage_names
       assert :second_stage in stage_names
       assert :third_stage in stage_names
     end
   end
 
-  describe "pipeline execution" do
-    test "executes a simple pipeline" do
+  describe "agent execution" do
+    test "executes a simple agent" do
       input = %{"text" => "what's this animal?"}
 
       BeamMePrompty.FakeLlmClient
@@ -52,7 +52,7 @@ defmodule BeamMePrompty.PipelineTest do
         {:ok, %{"final_result" => "And it's Perry the Platypus!"}}
       end)
 
-      assert {:ok, results} = BeamMePrompty.execute(TestPipeline.pipeline(), input)
+      assert {:ok, results} = BeamMePrompty.execute(TestAgent.agent(), input)
 
       assert Map.has_key?(results, :first_stage)
       assert Map.has_key?(results, :second_stage)

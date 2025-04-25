@@ -1,7 +1,7 @@
 defmodule BeamMePrompty.DAG.Executor.InMemory do
   @moduledoc """
-  Default in-memory DAG executor for BeamMePrompty pipelines.
-  Executes pipeline stages in topological order, maintaining stage results
+  Default in-memory DAG executor for BeamMePrompty agents.
+  Executes agent stages in topological order, maintaining stage results
   in memory and handling sequential execution without parallelism or external persistence.
   """
   use BeamMePrompty.DAG

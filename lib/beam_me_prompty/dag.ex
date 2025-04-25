@@ -1,9 +1,9 @@
 defmodule BeamMePrompty.DAG do
   @moduledoc """
-  Directed Acyclic Graph (DAG) implementation for pipeline execution.
+  Directed Acyclic Graph (DAG) implementation for agent execution.
 
   This module provides functionality to:
-  1. Build a DAG from pipeline stage definitions
+  1. Build a DAG from agent stage definitions
   2. Validate the DAG (check for cycles)
   3. Execute the DAG using a specified executor
 
@@ -72,7 +72,7 @@ defmodule BeamMePrompty.DAG do
               {:ok, any()} | {:error, any()}
 
   @doc """
-  Builds a DAG from pipeline stages.
+  Builds a DAG from agent stages.
 
   Returns a map with:
   - :nodes - Map of stage names to their full configuration

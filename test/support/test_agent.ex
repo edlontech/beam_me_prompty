@@ -1,7 +1,7 @@
-defmodule BeamMePrompty.TestPipeline do
-  use BeamMePrompty.Pipeline
+defmodule BeamMePrompty.TestAgent do
+  use BeamMePrompty.Agent
 
-  pipeline "simple_test" do
+  agent "simple_test" do
     stage :first_stage do
       using model: "test-model", llm_client: BeamMePrompty.FakeLlmClient
 

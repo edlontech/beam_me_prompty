@@ -2,7 +2,7 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
   @moduledoc """
   Google Gemini API adapter implementing the BeamMePrompty.LLM behaviour.
   Constructs requests, communicates with the Gemini endpoint via Req,
-  and parses responses into plain text or structured output for pipelines.
+  and parses responses into plain text or structured output for agents.
   """
   @behaviour BeamMePrompty.LLM
 
