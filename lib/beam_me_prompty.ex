@@ -9,7 +9,7 @@ defmodule BeamMePrompty do
   alias BeamMePrompty.Errors
 
   def execute(agent, input, opts \\ []) do
-    executor = Keyword.get(opts, :executor, BeamMePrompty.DAG.Executor.InMemory)
+    executor = Keyword.get(opts, :executor)
     override_llm = Keyword.get(opts, :llm_client)
     dag = BeamMePrompty.DAG.build(agent.stages)
 

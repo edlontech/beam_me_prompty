@@ -126,6 +126,21 @@ defmodule BeamMePrompty.DAG do
     %{dag | roots: roots}
   end
 
+  def find_ready_nodes(dag, results) do
+    executed_nodes = Map.keys(results) |> MapSet.new()
+
+    Enum.filter(Map.keys(dag.nodes), fn node ->
+      if MapSet.member?(executed_nodes, node) do
+        false
+      else
+        node_config = Map.get(dag.nodes, node)
+        dependencies = node_config.depends_on || []
+
+        Enum.all?(dependencies, fn dep -> Map.has_key?(results, dep) end)
+      end
+    end)
+  end
+
   @doc """
   Validates that the DAG has no cycles.
 
