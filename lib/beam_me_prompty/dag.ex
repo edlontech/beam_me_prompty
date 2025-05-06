@@ -9,6 +9,17 @@ defmodule BeamMePrompty.DAG do
 
   The DAG module defines a behaviour that executors must implement.
   """
+  @type dag_node :: %{
+          name: String.t(),
+          depends_on: list(String.t()) | nil,
+          config: map()
+        }
+
+  @type dag :: %{
+          nodes: %{required(String.t()) => dag_node()},
+          edges: %{required(String.t()) => list(String.t())},
+          roots: list(String.t())
+        }
 
   @doc """
   Builds a DAG from agent stages.
@@ -18,6 +29,7 @@ defmodule BeamMePrompty.DAG do
   - :edges - Map of stage names to lists of dependent stage names
   - :roots - List of stage names with no dependencies
   """
+  @spec build(list(node())) :: dag()
   def build(stages) do
     dag = %{
       nodes: %{},
@@ -65,6 +77,16 @@ defmodule BeamMePrompty.DAG do
     %{dag | roots: roots}
   end
 
+  @doc """
+  Finds nodes that are ready to be executed.
+
+  A node is ready if:
+  1. It has not been executed yet
+  2. All its dependencies have been executed (are in results)
+
+  Returns a list of node names.
+  """
+  @spec find_ready_nodes(dag(), %{required(String.t()) => any()}) :: list(String.t())
   def find_ready_nodes(dag, results) do
     executed_nodes = Map.keys(results) |> MapSet.new()
 
@@ -85,6 +107,7 @@ defmodule BeamMePrompty.DAG do
 
   Returns :ok if valid, {:error, reason} otherwise.
   """
+  @spec validate(dag()) :: :ok | {:error, String.t()}
   def validate(dag) do
     visited = MapSet.new()
     temp_visited = MapSet.new()
@@ -135,20 +158,5 @@ defmodule BeamMePrompty.DAG do
         end
       end
     end
-  end
-
-  @doc """
-  Executes the DAG using the specified executor.
-
-  Takes:
-  - dag: The DAG structure
-  - input: The initial input data
-  - execute_fn: Function to execute a single node (fn node, context -> {:ok, result} | {:error, reason} end)
-  - executor: The executor module to use (defaults to BeamMePrompty.DAG.Executor.InMemory)
-
-  Returns {:ok, results} or {:error, reason}
-  """
-  def execute(dag, initial_context, execute_fn, executor \\ BeamMePrompty.DAG.Executor.InMemory) do
-    executor.execute(dag, initial_context, execute_fn)
   end
 end
