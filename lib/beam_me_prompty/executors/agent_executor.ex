@@ -1,4 +1,4 @@
-defmodule BeamMePrompty.DAG.Executor.StateMachine do
+defmodule BeamMePrompty.Executors.StateMachine do
   @moduledoc """
   GenStatem-based executor for BeamMePrompty agents.
   Provides robust state management and concurrency control.
@@ -12,16 +12,14 @@ defmodule BeamMePrompty.DAG.Executor.StateMachine do
   - :node_completed -> :planning (to find next nodes)
   """
   use GenStateMachine, callback_mode: :handle_event_function
-  use BeamMePrompty.DAG
 
   alias BeamMePrompty.DAG.Executor.State, as: ExecutorState
 
-  @impl true
-  def execute(dag, initial_context, node_executor) do
+  def execute(dag, initial_context) do
     case DAG.validate(dag) do
       :ok ->
         # Start the state machine and execute the DAG
-        {:ok, pid} = GenStateMachine.start_link(__MODULE__, {dag, initial_context, node_executor})
+        {:ok, pid} = GenStateMachine.start_link(__MODULE__, {dag, initial_context})
         result = GenStateMachine.call(pid, :execute)
         GenStateMachine.stop(pid)
         result
@@ -32,8 +30,8 @@ defmodule BeamMePrompty.DAG.Executor.StateMachine do
   end
 
   @impl true
-  def init({dag, initial_context, node_executor}) do
-    state = ExecutorState.new(dag, initial_context, node_executor)
+  def init({dag, initial_context}) do
+    state = ExecutorState.new(dag, initial_context)
     {:ok, state.state, state}
   end
 
@@ -51,29 +49,23 @@ defmodule BeamMePrompty.DAG.Executor.StateMachine do
     ready_nodes = DAG.find_ready_nodes(data.dag, data.results)
 
     cond do
-      # All nodes have been executed successfully
       map_size(data.results) == map_size(data.dag.nodes) ->
         {:next_state, :complete, data, [{:reply, data.caller, {:ok, data.results}}]}
 
-      # No more nodes to process but DAG not complete - possibly unreachable nodes
       Enum.empty?(ready_nodes) ->
         error = "Not all nodes could be executed. Possible unreachable nodes."
 
         {:next_state, :error, Map.put(data, :error, error),
          [{:reply, data.caller, {:error, error}}]}
 
-      # Process all ready nodes in parallel
       true ->
-        # Start Task for each ready node
         tasks =
           for node_name <- ready_nodes do
             node = Map.get(data.dag.nodes, node_name)
 
             Task.async(fn ->
-              # Create the node execution context with dependency results
               node_context = Map.merge(data.initial_context, %{dependency_results: data.results})
-              # Execute the node and return node name with result
-              {node_name, execute_node(node, node_context, data.node_executor)}
+              {node_name, execute_node(node, node_context)}
             end)
           end
 
@@ -129,7 +121,7 @@ defmodule BeamMePrompty.DAG.Executor.StateMachine do
     node_context = Map.merge(data.initial_context, %{dependency_results: data.results})
 
     # Execute the node
-    case execute_node(node, node_context, data.node_executor) do
+    case execute_node(node, node_context) do
       {:ok, result} ->
         # Update results and transition to node_completed state
         new_data = %{data | results: Map.put(data.results, node_name, result)}

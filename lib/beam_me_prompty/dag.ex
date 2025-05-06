@@ -11,67 +11,6 @@ defmodule BeamMePrompty.DAG do
   """
 
   @doc """
-  Provides a convenient way to implement the DAG behaviour.
-
-  When used, it:
-  - Declares the module as implementing the BeamMePrompty.DAG behaviour
-  - Imports helper functions from BeamMePrompty.DAG
-  - Provides default implementations for callbacks that can be overridden
-
-  Example:
-      defmodule MyCustomExecutor do
-        use BeamMePrompty.DAG
-        
-        @impl true
-        def execute(dag, input, node_executor) do
-          # Custom implementation
-        end
-      end
-  """
-  defmacro __using__(_opts) do
-    quote location: :keep do
-      @behaviour BeamMePrompty.DAG
-
-      alias BeamMePrompty.DAG
-
-      import BeamMePrompty.DAG, only: [build: 1, validate: 1]
-
-      @impl true
-      def execute_node(node, input, executor_fn) do
-        executor_fn.(node, input)
-      end
-
-      defoverridable execute_node: 3
-    end
-  end
-
-  @doc """
-  Callback for executing a DAG.
-
-  Takes:
-  - dag: The DAG structure
-  - input: The initial input data
-  - node_executor: Function to execute a single node
-
-  Returns {:ok, results} or {:error, reason}
-  """
-  @callback execute(dag :: map(), initial_context :: map(), node_executor :: function()) ::
-              {:ok, map()} | {:error, any()}
-
-  @doc """
-  Callback for executing a single node in the DAG.
-
-  Takes:
-  - node: The node configuration
-  - input: The input data for this node
-  - executor_fn: Function to execute the node logic
-
-  Returns {:ok, result} or {:error, reason}
-  """
-  @callback execute_node(node :: map(), input :: map(), executor_fn :: function()) ::
-              {:ok, any()} | {:error, any()}
-
-  @doc """
   Builds a DAG from agent stages.
 
   Returns a map with:

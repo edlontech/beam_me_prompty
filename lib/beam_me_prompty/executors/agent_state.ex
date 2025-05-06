@@ -1,4 +1,4 @@
-defmodule BeamMePrompty.DAG.Executor.State do
+defmodule BeamMePrompty.Executors.AgentState do
   @moduledoc """
   Encapsulates the execution state for a BeamMePrompty agent.
   Tracks execution progress, results, and the current state of the state machine.
@@ -14,8 +14,6 @@ defmodule BeamMePrompty.DAG.Executor.State do
     :current_node,
     # PID of the caller process
     :caller,
-    # Function to execute nodes
-    :node_executor,
     # Current state machine state 
     :state,
     # Timestamp when execution started
@@ -32,7 +30,6 @@ defmodule BeamMePrompty.DAG.Executor.State do
           initial_context: map(),
           current_node: String.t() | nil,
           caller: pid() | nil,
-          node_executor: function() | nil,
           state: atom(),
           started_at: integer() | nil,
           last_transition_at: integer() | nil,
@@ -42,14 +39,13 @@ defmodule BeamMePrompty.DAG.Executor.State do
   @doc """
   Creates a new execution state from a DAG, initial context, and node executor function
   """
-  def new(dag, initial_context, node_executor) do
+  def new(dag, initial_context) do
     now = System.monotonic_time()
 
     %__MODULE__{
       dag: dag,
       results: %{},
       initial_context: initial_context,
-      node_executor: node_executor,
       state: :ready,
       started_at: now,
       last_transition_at: now,
