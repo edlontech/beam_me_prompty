@@ -1,4 +1,4 @@
-defmodule BeamMePrompty.Agents.ExecutorOptions do
+defmodule BeamMePrompty.AgentExecution.ExecutorOptions do
   @schema NimbleOptions.new!(
             name: [
               type: :string,
