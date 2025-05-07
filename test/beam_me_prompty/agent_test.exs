@@ -1,10 +1,11 @@
 defmodule BeamMePrompty.AgentTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import Hammox
 
   alias BeamMePrompty.TestAgent
 
+  setup :set_mox_from_context
   setup :verify_on_exit!
 
   describe "agent structure" do
@@ -52,7 +53,7 @@ defmodule BeamMePrompty.AgentTest do
         {:ok, "And it's Perry the Platypus!"}
       end)
 
-      assert {:ok, results} = TestAgent.start_link([])
+      assert {:ok, results} = TestAgent.run_sync(input)
 
       assert Map.has_key?(results, :first_stage)
       assert Map.has_key?(results, :second_stage)

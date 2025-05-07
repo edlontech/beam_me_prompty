@@ -75,6 +75,10 @@ defmodule BeamMePrompty.Agent do
           opts
         )
       end
+
+      def run_sync(input, state \\ %{}, opts \\ [], timeout \\ 15_000) do
+        BeamMePrompty.Agents.Executor.execute(__MODULE__, input, state, opts, timeout)
+      end
     end
   end
 

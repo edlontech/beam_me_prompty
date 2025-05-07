@@ -10,7 +10,7 @@ defmodule BeamMePrompty.Agents.Internals do
     :restart,
     :nodes_to_execute,
     :initial_state,
-    :inner_state,
+    :current_state,
     :started_at,
     :last_transition_at,
     :opts
@@ -28,7 +28,7 @@ defmodule BeamMePrompty.Agents.Internals do
       module: module,
       global_input: input,
       initial_state: state,
-      inner_state: state,
+      current_state: state,
       results: %{}
     }
 
@@ -38,12 +38,11 @@ defmodule BeamMePrompty.Agents.Internals do
   end
 
   def waiting_for_plan(:internal, :plan, data) do
-    ready_nodes = DAG.find_ready_nodes(data.dag, data.inner_state)
+    ready_nodes = DAG.find_ready_nodes(data.dag, data.results)
 
     cond do
       map_size(data.results) == map_size(data.dag.nodes) ->
-        data.module.handle_complete(data.results, data.inner_state)
-
+        data.module.handle_complete(data.results, data.current_state)
         {:next_state, :completed, data}
 
       Enum.empty?(ready_nodes) ->
@@ -73,16 +72,20 @@ defmodule BeamMePrompty.Agents.Internals do
     end
   end
 
+  def waiting_for_plan(:call, {:get_state, from}, data) do
+    {:keep_state, data, [{:reply, from, {:ok, data.current_state}}]}
+  end
+
   def execute_nodes(:internal, :execute, data) do
     results =
       Enum.reduce_while(data.nodes_to_execute, {:ok, data.results || %{}}, fn {node_name, node,
                                                                                context},
                                                                               {:ok, acc_results} ->
-        data.module.handle_stage_start(node, data.inner_state)
+        data.module.handle_stage_start(node, data.current_state)
 
         case execute_stage(node, context) do
           {:ok, result} ->
-            data.module.handle_stage_finish(node, result, data.inner_state)
+            data.module.handle_stage_finish(node, result, data.current_state)
             {:cont, {:ok, Map.put(acc_results, node_name, result)}}
 
           {:error, reason} ->
@@ -95,7 +98,6 @@ defmodule BeamMePrompty.Agents.Internals do
         updated_data = %__MODULE__{
           data
           | results: updated_results,
-            inner_state: %{data.inner_state | results: updated_results},
             nodes_to_execute: nil
         }
 
@@ -106,12 +108,9 @@ defmodule BeamMePrompty.Agents.Internals do
     end
   end
 
-  def completed(:internal, _event, data) do
-    {:keep_state, data}
-  end
-
-  def completed(:call, {:get_results, from}, data) do
-    {:keep_state, data, [{:reply, from, {:ok, data.results}}]}
+  def completed({:call, from}, :get_results, data) do
+    GenStateMachine.reply(from, {:ok, :completed, data.results})
+    :keep_state_and_data
   end
 
   defp execute_stage(stage, exec_context) do
@@ -298,16 +297,16 @@ defmodule BeamMePrompty.Agents.Internals do
   defp handle_error({:error, error}, data) do
     error
     |> Errors.to_class()
-    |> data.module.handle_error(data.inner_state)
+    |> data.module.handle_error(data.current_state)
     |> handle_error_callback(data)
   end
 
   defp handle_error_callback({:retry, reason, state}, data) do
-    %__MODULE__{data | inner_state: state.inner_state, retry: reason}
+    %__MODULE__{data | current_state: state.current_state, retry: reason}
   end
 
   defp handle_error_callback({:restart, reason}, data) do
-    %__MODULE__{data | inner_state: data.initial_state, restart: reason}
+    %__MODULE__{data | current_state: data.current_state, restart: reason}
   end
 
   defp handle_error_callback({:stop, reason}, data) do
