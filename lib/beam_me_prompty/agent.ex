@@ -63,11 +63,17 @@ defmodule BeamMePrompty.Agent do
       end
 
       @doc false
-      def start_link(start_opts) do
-        state = Keyword.fetch!(start_opts, :state)
+      def start_link(start_opts \\ []) do
+        input = Keyword.get(start_opts, :input, %{})
+        initial_state = Keyword.get(start_opts, :initial_state, %{})
         opts = Keyword.get(start_opts, :opts, [])
 
-        BeamMePrompty.Agents.Executor.start_link(@agent_stages, __MODULE__, state, opts)
+        BeamMePrompty.Agents.Executor.start_link(
+          __MODULE__,
+          input,
+          initial_state,
+          opts
+        )
       end
     end
   end

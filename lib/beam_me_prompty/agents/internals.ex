@@ -4,6 +4,7 @@ defmodule BeamMePrompty.Agents.Internals do
   defstruct [
     :dag,
     :module,
+    :global_input,
     :results,
     :retry,
     :restart,
@@ -20,16 +21,19 @@ defmodule BeamMePrompty.Agents.Internals do
   alias BeamMePrompty.LLM.MessageParser
 
   @impl true
-  def init({dag, state, opts, module}) do
+  def init({dag, input, state, opts, module}) do
     data = %__MODULE__{
       dag: dag,
       opts: opts,
       module: module,
+      global_input: input,
       initial_state: state,
-      inner_state: state
+      inner_state: state,
+      results: %{}
     }
 
     actions = [{:next_event, :internal, :plan}]
+
     {:ok, :waiting_for_plan, data, actions}
   end
 
@@ -37,7 +41,7 @@ defmodule BeamMePrompty.Agents.Internals do
     ready_nodes = DAG.find_ready_nodes(data.dag, data.inner_state)
 
     cond do
-      map_size(data.inner_state.results) == map_size(data.dag.nodes) ->
+      map_size(data.results) == map_size(data.dag.nodes) ->
         data.module.handle_complete(data.results, data.inner_state)
 
         {:next_state, :completed, data}
@@ -54,7 +58,13 @@ defmodule BeamMePrompty.Agents.Internals do
         nodes_to_execute =
           Enum.map(ready_nodes, fn node_name ->
             node = Map.get(data.dag.nodes, node_name)
-            node_context = Map.merge(data.initial_state, %{dependency_results: data.results})
+
+            node_context =
+              Map.merge(data.initial_state, %{
+                dependency_results: data.results,
+                global_input: data.global_input
+              })
+
             {node_name, node, node_context}
           end)
 
@@ -109,14 +119,14 @@ defmodule BeamMePrompty.Agents.Internals do
 
     config =
       Map.replace_lazy(config, :llm_client, fn client ->
-        case exec_context.llm_client do
+        case exec_context[:llm_client] do
           nil -> client
           exec_client -> exec_client
         end
       end)
 
-    global_input = exec_context.global_input
-    dependency_results = exec_context.dependency_results || %{}
+    global_input = exec_context[:global_input]
+    dependency_results = exec_context[:dependency_results] || %{}
 
     with {:ok, prepared_input} <-
            prepare_stage_input(config, global_input, dependency_results),

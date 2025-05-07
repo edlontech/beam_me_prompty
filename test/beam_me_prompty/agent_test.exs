@@ -52,7 +52,7 @@ defmodule BeamMePrompty.AgentTest do
         {:ok, "And it's Perry the Platypus!"}
       end)
 
-      assert {:ok, results} = BeamMePrompty.execute(TestAgent.agent(), input)
+      assert {:ok, results} = TestAgent.start_link([])
 
       assert Map.has_key?(results, :first_stage)
       assert Map.has_key?(results, :second_stage)
