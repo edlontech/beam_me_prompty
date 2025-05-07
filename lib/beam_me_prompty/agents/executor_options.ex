@@ -3,6 +3,22 @@ defmodule BeamMePrompty.Agents.ExecutorOptions do
             name: [
               type: :string,
               doc: "Name for the agent executor"
+            ],
+            max_retries: [
+              type: :non_neg_integer,
+              default: 3
+            ],
+            backoff_initial: [
+              type: :non_neg_integer,
+              default: 1000
+            ],
+            backoff_factor: [
+              type: :float,
+              default: 2.0
+            ],
+            max_backoff: [
+              type: :non_neg_integer,
+              default: 30_000
             ]
           )
 

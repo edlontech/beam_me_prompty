@@ -4,16 +4,19 @@ defmodule BeamMePrompty.Agents.Internals do
   defstruct [
     :dag,
     :module,
+    :retry,
     :global_input,
     :results,
-    :retry,
-    :restart,
     :nodes_to_execute,
     :initial_state,
     :current_state,
     :started_at,
     :last_transition_at,
-    :opts
+    :opts,
+    :retry_count,
+    :retry_config,
+    :retry_node,
+    :retry_started_at
   ]
 
   alias BeamMePrompty.DAG
@@ -29,7 +32,15 @@ defmodule BeamMePrompty.Agents.Internals do
       global_input: input,
       initial_state: state,
       current_state: state,
-      results: %{}
+      results: %{},
+      retry_count: 0,
+      retry_config: %{
+        max_retries: Keyword.get(opts, :max_retries),
+        backoff_initial: Keyword.get(opts, :backoff_initial),
+        backoff_factor: Keyword.get(opts, :backoff_factor),
+        max_backoff: Keyword.get(opts, :max_backoff)
+      },
+      started_at: System.monotonic_time(:millisecond)
     }
 
     actions = [{:next_event, :internal, :plan}]
@@ -89,7 +100,8 @@ defmodule BeamMePrompty.Agents.Internals do
             {:cont, {:ok, Map.put(acc_results, node_name, result)}}
 
           {:error, reason} ->
-            {:halt, {:error, reason}}
+            # Store the failing node name for retry purposes
+            {:halt, {:error, {node_name, node, context, reason}}}
         end
       end)
 
@@ -106,6 +118,72 @@ defmodule BeamMePrompty.Agents.Internals do
       err ->
         handle_error(err, data)
     end
+  end
+
+  # New state function for retrying
+  def retrying(:internal, :retry, %{retry: retry_type} = data) do
+    # Reset retry to avoid confusion in future retries
+    data = %__MODULE__{data | retry: nil}
+
+    case retry_type do
+      {:only_stage, _reason} ->
+        # Ensure we have node information for retrying
+        if data.retry_node do
+          {node_name, node, context} = data.retry_node
+
+          # Execute just the failed node
+          data.module.handle_stage_start(node, data.current_state)
+
+          case execute_stage(node, context) do
+            {:ok, result} ->
+              data.module.handle_stage_finish(node, result, data.current_state)
+              updated_results = Map.put(data.results, node_name, result)
+
+              # Success! Continue with normal flow
+              updated_data = %__MODULE__{
+                data
+                | results: updated_results,
+                  nodes_to_execute: nil,
+                  retry_count: 0,
+                  retry_node: nil
+              }
+
+              {:next_state, :waiting_for_plan, updated_data, [{:next_event, :internal, :plan}]}
+
+            {:error, reason} ->
+              # Still failing, let's handle the error again
+              handle_error(
+                {:error, {node_name, node, context, reason}},
+                %__MODULE__{data | retry_node: {node_name, node, context}}
+              )
+          end
+        else
+          # Something's wrong, we don't have node info
+          {:error,
+           Errors.ExecutionError.exception(
+             step: :retrying,
+             cause: "Missing node information for retry."
+           )}
+          |> handle_error(%__MODULE__{data | retry_count: 0})
+        end
+
+      {:from_start, _reason} ->
+        # Reset everything and start from the beginning
+        reset_data = %__MODULE__{
+          data
+          | results: %{},
+            nodes_to_execute: nil,
+            current_state: data.initial_state,
+            retry_count: 0,
+            retry_node: nil
+        }
+
+        {:next_state, :waiting_for_plan, reset_data, [{:next_event, :internal, :plan}]}
+    end
+  end
+
+  def retrying(:info, :retry_timeout, data) do
+    {:next_state, :retrying, data, [{:next_event, :internal, :retry}]}
   end
 
   def completed({:call, from}, :get_results, data) do
@@ -294,6 +372,12 @@ defmodule BeamMePrompty.Agents.Internals do
     end
   end
 
+  defp handle_error({:error, {node_name, node, context, error}}, data) do
+    # Store the node information for retry
+    data = %__MODULE__{data | retry_node: {node_name, node, context}}
+    handle_error({:error, error}, data)
+  end
+
   defp handle_error({:error, error}, data) do
     error
     |> Errors.to_class()
@@ -302,14 +386,78 @@ defmodule BeamMePrompty.Agents.Internals do
   end
 
   defp handle_error_callback({:retry, reason, state}, data) do
-    %__MODULE__{data | current_state: state.current_state, retry: reason}
+    # Check if we've exceeded max retries
+    if data.retry_count >= data.retry_config.max_retries do
+      # Too many retries, stop with error
+      {:stop,
+       {:error,
+        Errors.ExecutionError.exception(
+          step: :retry,
+          cause: "Maximum retry attempts (#{data.retry_config.max_retries}) exceeded."
+        )}, data}
+    else
+      # Calculate backoff time using exponential backoff
+      retry_count = data.retry_count + 1
+      backoff_ms = calculate_backoff(retry_count, data.retry_config)
+
+      # Set up data for retry
+      updated_data = %__MODULE__{
+        data
+        | current_state: state.current_state,
+          retry: {:only_stage, reason},
+          retry_count: retry_count,
+          retry_started_at: System.monotonic_time(:millisecond)
+      }
+
+      # Schedule a retry after backoff
+      {:next_state, :retrying, updated_data, [{:state_timeout, backoff_ms, :retry_timeout}]}
+    end
   end
 
   defp handle_error_callback({:restart, reason}, data) do
-    %__MODULE__{data | current_state: data.current_state, restart: reason}
+    # Check if we've exceeded max retries
+    if data.retry_count >= data.retry_config.max_retries do
+      # Too many retries, stop with error
+      {:stop,
+       {:error,
+        Errors.ExecutionError.exception(
+          step: :retry,
+          cause: "Maximum retry attempts (#{data.retry_config.max_retries}) exceeded."
+        )}, data}
+    else
+      # Calculate backoff time using exponential backoff
+      retry_count = data.retry_count + 1
+      backoff_ms = calculate_backoff(retry_count, data.retry_config)
+
+      # Set up data for retry
+      updated_data = %__MODULE__{
+        data
+        | current_state: data.initial_state,
+          retry: {:from_start, reason},
+          retry_count: retry_count,
+          retry_started_at: System.monotonic_time(:millisecond)
+      }
+
+      # Schedule a retry after backoff
+      {:next_state, :retrying, updated_data, [{:state_timeout, backoff_ms, :retry_timeout}]}
+    end
   end
 
   defp handle_error_callback({:stop, reason}, data) do
     {:stop, reason, data}
+  end
+
+  # Calculate backoff time with exponential backoff strategy
+  defp calculate_backoff(retry_count, config) do
+    # Exponential backoff: initial * (factor ^ (retry_count - 1))
+    backoff = config.backoff_initial * :math.pow(config.backoff_factor, retry_count - 1)
+
+    # Add some jitter (±10%) to prevent thundering herd problem
+    # -10% to +10%
+    jitter = :rand.uniform(20) - 10
+    backoff_with_jitter = backoff * (1 + jitter / 100)
+
+    # Ensure we don't exceed max_backoff
+    trunc(min(backoff_with_jitter, config.max_backoff))
   end
 end
