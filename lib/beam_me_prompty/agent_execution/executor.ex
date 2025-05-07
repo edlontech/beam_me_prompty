@@ -1,6 +1,6 @@
-defmodule BeamMePrompty.Agents.Executor do
+defmodule BeamMePrompty.AgentExecution.Executor do
   alias BeamMePrompty.DAG
-  alias BeamMePrompty.Agents.ExecutorOptions
+  alias BeamMePrompty.AgentExecution.ExecutorOptions
   alias BeamMePrompty.Errors
 
   @type state :: map()

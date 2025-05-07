@@ -38,7 +38,7 @@ defmodule BeamMePrompty.Agent do
   """
   defmacro __using__(opts) do
     quote do
-      use BeamMePrompty.Agents.Executor
+      use BeamMePrompty.AgentExecution.Executor
 
       import BeamMePrompty.Agent
 

@@ -1,4 +1,4 @@
-defmodule BeamMePrompty.Agents.Internals do
+defmodule BeamMePrompty.AgentExecution.Internals do
   use GenStateMachine, callback_mode: :state_functions
 
   defstruct [
