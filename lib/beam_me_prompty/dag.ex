@@ -9,67 +9,17 @@ defmodule BeamMePrompty.DAG do
 
   The DAG module defines a behaviour that executors must implement.
   """
+  @type dag_node :: %{
+          name: String.t(),
+          depends_on: list(String.t()) | nil,
+          config: map()
+        }
 
-  @doc """
-  Provides a convenient way to implement the DAG behaviour.
-
-  When used, it:
-  - Declares the module as implementing the BeamMePrompty.DAG behaviour
-  - Imports helper functions from BeamMePrompty.DAG
-  - Provides default implementations for callbacks that can be overridden
-
-  Example:
-      defmodule MyCustomExecutor do
-        use BeamMePrompty.DAG
-        
-        @impl true
-        def execute(dag, input, node_executor) do
-          # Custom implementation
-        end
-      end
-  """
-  defmacro __using__(_opts) do
-    quote location: :keep do
-      @behaviour BeamMePrompty.DAG
-
-      alias BeamMePrompty.DAG
-
-      import BeamMePrompty.DAG, only: [build: 1, validate: 1]
-
-      @impl true
-      def execute_node(node, input, executor_fn) do
-        executor_fn.(node, input)
-      end
-
-      defoverridable execute_node: 3
-    end
-  end
-
-  @doc """
-  Callback for executing a DAG.
-
-  Takes:
-  - dag: The DAG structure
-  - input: The initial input data
-  - node_executor: Function to execute a single node
-
-  Returns {:ok, results} or {:error, reason}
-  """
-  @callback execute(dag :: map(), initial_context :: map(), node_executor :: function()) ::
-              {:ok, map()} | {:error, any()}
-
-  @doc """
-  Callback for executing a single node in the DAG.
-
-  Takes:
-  - node: The node configuration
-  - input: The input data for this node
-  - executor_fn: Function to execute the node logic
-
-  Returns {:ok, result} or {:error, reason}
-  """
-  @callback execute_node(node :: map(), input :: map(), executor_fn :: function()) ::
-              {:ok, any()} | {:error, any()}
+  @type dag :: %{
+          nodes: %{required(String.t()) => dag_node()},
+          edges: %{required(String.t()) => list(String.t())},
+          roots: list(String.t())
+        }
 
   @doc """
   Builds a DAG from agent stages.
@@ -79,6 +29,7 @@ defmodule BeamMePrompty.DAG do
   - :edges - Map of stage names to lists of dependent stage names
   - :roots - List of stage names with no dependencies
   """
+  @spec build(list(node())) :: dag()
   def build(stages) do
     dag = %{
       nodes: %{},
@@ -127,10 +78,36 @@ defmodule BeamMePrompty.DAG do
   end
 
   @doc """
+  Finds nodes that are ready to be executed.
+
+  A node is ready if:
+  1. It has not been executed yet
+  2. All its dependencies have been executed (are in results)
+
+  Returns a list of node names.
+  """
+  @spec find_ready_nodes(dag(), %{required(String.t()) => any()}) :: list(String.t())
+  def find_ready_nodes(dag, results) do
+    executed_nodes = Map.keys(results) |> MapSet.new()
+
+    Enum.filter(Map.keys(dag.nodes), fn node ->
+      if MapSet.member?(executed_nodes, node) do
+        false
+      else
+        node_config = Map.get(dag.nodes, node)
+        dependencies = node_config.depends_on || []
+
+        Enum.all?(dependencies, fn dep -> Map.has_key?(results, dep) end)
+      end
+    end)
+  end
+
+  @doc """
   Validates that the DAG has no cycles.
 
   Returns :ok if valid, {:error, reason} otherwise.
   """
+  @spec validate(dag()) :: :ok | {:error, String.t()}
   def validate(dag) do
     visited = MapSet.new()
     temp_visited = MapSet.new()
@@ -181,20 +158,5 @@ defmodule BeamMePrompty.DAG do
         end
       end
     end
-  end
-
-  @doc """
-  Executes the DAG using the specified executor.
-
-  Takes:
-  - dag: The DAG structure
-  - input: The initial input data
-  - execute_fn: Function to execute a single node (fn node, context -> {:ok, result} | {:error, reason} end)
-  - executor: The executor module to use (defaults to BeamMePrompty.DAG.Executor.InMemory)
-
-  Returns {:ok, results} or {:error, reason}
-  """
-  def execute(dag, initial_context, execute_fn, executor \\ BeamMePrompty.DAG.Executor.InMemory) do
-    executor.execute(dag, initial_context, execute_fn)
   end
 end

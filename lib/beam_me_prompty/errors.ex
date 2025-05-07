@@ -7,4 +7,6 @@ defmodule BeamMePrompty.Errors do
       unknown: BeamMePrompty.Errors.Unknown
     ],
     unknown_error: BeamMePrompty.Errors.Unknown.Unknown
+
+  def error_classes(), do: @error_classes
 end

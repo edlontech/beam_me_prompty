@@ -28,8 +28,6 @@ defmodule BeamMePrompty.LLM.MessageParser do
 
   defp evaluate_expression(expression, inputs) do
     try do
-      dbg(expression)
-      dbg(inputs)
       {result, _} = Code.eval_string(expression, input: normalize_keys(inputs))
       to_string(result)
     rescue
