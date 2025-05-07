@@ -1,4 +1,6 @@
-defmodule BeamMePrompty.Agents.InternalState do
+defmodule BeamMePrompty.Agents.Internals do
+  use GenStateMachine, callback_mode: :state_functions
+
   defstruct [
     :dag,
     :module,
@@ -10,20 +12,12 @@ defmodule BeamMePrompty.Agents.InternalState do
     :inner_state,
     :started_at,
     :last_transition_at,
-    :response_queue,
     :opts
   ]
-
-  @behaviour :gen_statem
 
   alias BeamMePrompty.DAG
   alias BeamMePrompty.Errors
   alias BeamMePrompty.LLM.MessageParser
-
-  @impl true
-  def callback_mode do
-    :state_functions
-  end
 
   @impl true
   def init({dag, state, opts, module}) do
@@ -32,8 +26,7 @@ defmodule BeamMePrompty.Agents.InternalState do
       opts: opts,
       module: module,
       initial_state: state,
-      inner_state: state,
-      response_queue: []
+      inner_state: state
     }
 
     actions = [{:next_event, :internal, :plan}]
@@ -45,6 +38,8 @@ defmodule BeamMePrompty.Agents.InternalState do
 
     cond do
       map_size(data.inner_state.results) == map_size(data.dag.nodes) ->
+        data.module.handle_complete(data.results, data.inner_state)
+
         {:next_state, :completed, data}
 
       Enum.empty?(ready_nodes) ->
@@ -99,6 +94,14 @@ defmodule BeamMePrompty.Agents.InternalState do
       err ->
         handle_error(err, data)
     end
+  end
+
+  def completed(:internal, _event, data) do
+    {:keep_state, data}
+  end
+
+  def completed(:call, {:get_results, from}, data) do
+    {:keep_state, data, [{:reply, from, {:ok, data.results}}]}
   end
 
   defp execute_stage(stage, exec_context) do

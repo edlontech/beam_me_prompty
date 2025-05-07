@@ -36,8 +36,10 @@ defmodule BeamMePrompty.Agent do
   @doc """
   When used, defines the necessary macros for the agent DSL.
   """
-  defmacro __using__(_opts) do
+  defmacro __using__(opts) do
     quote do
+      use BeamMePrompty.Agents.Executor
+
       import BeamMePrompty.Agent
 
       alias BeamMePrompty.DAG
@@ -50,12 +52,23 @@ defmodule BeamMePrompty.Agent do
 
       @before_compile BeamMePrompty.Agent
 
-      defdelegate build_dag(stages), to: BeamMePrompty.DAG, as: :build
-      defdelegate validate_dag(dag), to: BeamMePrompty.DAG, as: :validate
+      @doc false
+      def child_spec(start_opts) do
+        %{
+          id: __MODULE__,
+          start: {__MODULE__, :start_link, [start_opts]},
+          restart: :transient
+        }
+        |> Supervisor.child_spec(unquote(Macro.escape(opts)))
+      end
 
-      defdelegate execute_dag(dag, input, execute_fn, executor),
-        to: BeamMePrompty.DAG,
-        as: :execute
+      @doc false
+      def start_link(start_opts) do
+        state = Keyword.fetch!(start_opts, :state)
+        opts = Keyword.get(start_opts, :opts, [])
+
+        BeamMePrompty.Agents.Executor.start_link(@agent_stages, __MODULE__, state, opts)
+      end
     end
   end
 
