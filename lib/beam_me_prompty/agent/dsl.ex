@@ -38,6 +38,7 @@ defmodule BeamMePrompty.Agent.Dsl do
     field :top_k, integer() | nil
     field :frequency_penalty, float() | nil
     field :presence_penalty, float() | nil
+    field :structured_response, OpenApiSpex.Schema.t() | nil
   end
 
   typedstruct module: LLM do
@@ -104,6 +105,10 @@ defmodule BeamMePrompty.Agent.Dsl do
         type:
           {:custom, BeamMePrompty.Commons.CustomValidations, :validate_float_range, [-2.0, 2.0]},
         doc: "Presence penalty."
+      ],
+      structured_response: [
+        type: {:struct, OpenApiSpex.Schema},
+        doc: "Schema that the LLM should follow for structured responses"
       ]
     ]
   }

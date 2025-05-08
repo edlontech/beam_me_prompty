@@ -15,6 +15,7 @@
     top_p: 1,
     frequency_penalty: 1,
     presence_penalty: 1,
+    structured_response: 1,
     depends_on: 1
   ],
   export: [
@@ -30,7 +31,8 @@
       temperature: 1,
       top_p: 1,
       frequency_penalty: 1,
-      presence_penalty: 1
+      presence_penalty: 1,
+      structured_response: 1
     ]
   ]
 ]
