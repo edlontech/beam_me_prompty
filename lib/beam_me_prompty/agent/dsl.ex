@@ -28,7 +28,7 @@ defmodule BeamMePrompty.Agent.Dsl do
 
   typedstruct module: Message do
     field :role, BeamMePrompty.Agent.Dsl.role()
-    field :content, TextPart.t() | FilePart.t() | DataPart.t()
+    field :content, list(TextPart.t() | FilePart.t() | DataPart.t())
   end
 
   typedstruct module: LLMParams do
@@ -44,13 +44,13 @@ defmodule BeamMePrompty.Agent.Dsl do
     field :model, String.t()
     field :llm_client, module()
     field :params, LLMParams.t() | nil
+    field :messages, list(Message.t())
   end
 
   typedstruct module: Stage do
     field :name, atom()
     field :depends_on, list(String.t()) | nil
     field :llm, LLM.t() | nil
-    field :messages, list(Message.t())
   end
 
   @message_entity %Spark.Dsl.Entity{
@@ -61,10 +61,12 @@ defmodule BeamMePrompty.Agent.Dsl do
     schema: [
       role: [
         type: :atom,
+        required: true,
         doc: "Role of the message sender."
       ],
       content: [
-        type: :any,
+        type: {:list, :any},
+        required: true,
         doc: "Content of the message."
       ]
     ]
@@ -76,27 +78,31 @@ defmodule BeamMePrompty.Agent.Dsl do
     target: LLMParams,
     schema: [
       max_tokens: [
-        type: :integer,
+        type: :non_neg_integer,
         doc: "Maximum number of tokens to generate."
       ],
       temperature: [
-        type: :float,
+        type:
+          {:custom, BeamMePrompty.Commons.CustomValidations, :validate_float_range, [0.0, 2.0]},
         doc: "Sampling temperature."
       ],
       top_p: [
-        type: :float,
+        type:
+          {:custom, BeamMePrompty.Commons.CustomValidations, :validate_float_range, [0.0, 1.0]},
         doc: "Nucleus sampling parameter."
       ],
       top_k: [
-        type: :integer,
+        type: :non_neg_integer,
         doc: "Top-k sampling parameter."
       ],
       frequency_penalty: [
-        type: :float,
+        type:
+          {:custom, BeamMePrompty.Commons.CustomValidations, :validate_float_range, [-2.0, 2.0]},
         doc: "Frequency penalty."
       ],
       presence_penalty: [
-        type: :float,
+        type:
+          {:custom, BeamMePrompty.Commons.CustomValidations, :validate_float_range, [-2.0, 2.0]},
         doc: "Presence penalty."
       ]
     ]
@@ -108,14 +114,17 @@ defmodule BeamMePrompty.Agent.Dsl do
     describe: "Defines the LLM model and client.",
     target: LLM,
     entities: [
-      params: [@llm_params_entity]
+      params: [@llm_params_entity],
+      messages: [@message_entity]
     ],
     schema: [
       model: [
+        required: true,
         type: :string
       ],
       llm_client: [
         type: :module,
+        required: true,
         doc: "The LLM client module to use."
       ]
     ]
@@ -127,12 +136,12 @@ defmodule BeamMePrompty.Agent.Dsl do
     describe: "Defines a stage in the agent.",
     target: Stage,
     entities: [
-      llm: [@llm_entity],
-      messages: [@message_entity]
+      llm: [@llm_entity]
     ],
     schema: [
       name: [
         type: :atom,
+        required: true,
         doc: "Name of the stage."
       ],
       depends_on: [
@@ -153,5 +162,9 @@ defmodule BeamMePrompty.Agent.Dsl do
   }
 
   use Spark.Dsl.Extension,
-    sections: [@agent_section]
+    sections: [@agent_section],
+    verifiers: [
+      BeamMePrompty.Agent.Dsl.Verifiers.HasStages,
+      BeamMePrompty.Agent.Dsl.Verifiers.StagesAreValid
+    ]
 end

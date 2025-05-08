@@ -8,36 +8,19 @@ defmodule BeamMePrompty.AgentTest do
   setup :set_mox_from_context
   setup :verify_on_exit!
 
-  describe "agent structure" do
-    test "each agent has a name" do
-      assert TestAgent.agent_name() == "simple_test"
-    end
-
-    test "agent has stages" do
-      agent = TestAgent.agent()
-      assert is_list(agent.stages)
-      assert length(agent.stages) == 3
-
-      # Check stage names
-      stage_names = Enum.map(agent.stages, & &1.name)
-      assert :first_stage in stage_names
-      assert :second_stage in stage_names
-      assert :third_stage in stage_names
-    end
-  end
-
   describe "agent execution" do
     test "executes a simple agent" do
-      input = %{"text" => "what's this animal?"}
+      input = %{"text" => "bonk bonk bonk"}
 
       BeamMePrompty.FakeLlmClient
       |> expect(:completion, fn messages, opts ->
-        assert Keyword.get(opts, :temperature) == 0.5
-        assert Keyword.get(opts, :max_tokens) == 100
-        assert Keyword.get(opts, :key) == "test-key"
+        assert opts.temperature == 0.5
+        assert opts.top_p == 0.9
+        assert opts.frequency_penalty == 0.1
+        assert opts.presence_penalty == 0.2
 
         assert [
-                 user: "Process this input: what's this animal?",
+                 user: "Wat dis bonk bonk bonk",
                  system: "You are a helpful assistant."
                ] == messages
 

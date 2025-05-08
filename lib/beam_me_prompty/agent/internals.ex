@@ -100,7 +100,6 @@ defmodule BeamMePrompty.Agent.Internals do
             {:cont, {:ok, Map.put(acc_results, node_name, result)}}
 
           {:error, reason} ->
-            # Store the failing node name for retry purposes
             {:halt, {:error, {node_name, node, context, reason}}}
         end
       end)
@@ -120,18 +119,14 @@ defmodule BeamMePrompty.Agent.Internals do
     end
   end
 
-  # New state function for retrying
   def retrying(:internal, :retry, %{retry: retry_type} = data) do
-    # Reset retry to avoid confusion in future retries
     data = %__MODULE__{data | retry: nil}
 
     case retry_type do
       {:only_stage, _reason} ->
-        # Ensure we have node information for retrying
         if data.retry_node do
           {node_name, node, context} = data.retry_node
 
-          # Execute just the failed node
           data.module.handle_stage_start(node, data.current_state)
 
           case execute_stage(node, context) do
@@ -139,7 +134,6 @@ defmodule BeamMePrompty.Agent.Internals do
               data.module.handle_stage_finish(node, result, data.current_state)
               updated_results = Map.put(data.results, node_name, result)
 
-              # Success! Continue with normal flow
               updated_data = %__MODULE__{
                 data
                 | results: updated_results,
@@ -151,14 +145,12 @@ defmodule BeamMePrompty.Agent.Internals do
               {:next_state, :waiting_for_plan, updated_data, [{:next_event, :internal, :plan}]}
 
             {:error, reason} ->
-              # Still failing, let's handle the error again
               handle_error(
                 {:error, {node_name, node, context, reason}},
                 %__MODULE__{data | retry_node: {node_name, node, context}}
               )
           end
         else
-          # Something's wrong, we don't have node info
           {:error,
            Errors.ExecutionError.exception(
              step: :retrying,
@@ -168,7 +160,6 @@ defmodule BeamMePrompty.Agent.Internals do
         end
 
       {:from_start, _reason} ->
-        # Reset everything and start from the beginning
         reset_data = %__MODULE__{
           data
           | results: %{},
@@ -192,101 +183,22 @@ defmodule BeamMePrompty.Agent.Internals do
   end
 
   defp execute_stage(stage, exec_context) do
-    config = stage.llm
-
-    config =
-      Map.replace_lazy(config, :llm_client, fn client ->
-        case exec_context[:llm_client] do
-          nil -> client
-          exec_client -> exec_client
-        end
-      end)
-
     global_input = exec_context[:global_input]
     dependency_results = exec_context[:dependency_results] || %{}
+    inputs = Map.merge(global_input, dependency_results)
 
-    with {:ok, prepared_input} <-
-           prepare_stage_input(config, global_input, dependency_results),
-         {:ok, validated_input} <- validate_input(config, prepared_input),
-         {:ok, llm_result} <- maybe_call_llm(config, validated_input),
-         {:ok, validated_llm_result} <- validate_output(config, llm_result),
-         {:ok, final_result} <-
-           maybe_call_function(config, validated_input, validated_llm_result) do
-      {:ok, final_result}
+    with {:ok, llm_result} <- maybe_call_llm(stage.llm, inputs) do
+      {:ok, llm_result}
     else
       {:error, reason} -> {:error, Errors.to_class(reason)}
       result when is_map(result) -> {:ok, result}
     end
   end
 
-  defp prepare_stage_input(config, global_input, dependency_results) do
-    input_source = Map.get(config, :input)
-
-    merged_input =
-      if input_source do
-        case input_source do
-          %{from: from_stage, select: select_path} when not is_nil(from_stage) ->
-            case Map.get(dependency_results, from_stage) do
-              nil ->
-                {:error,
-                 Errors.ExecutionError.exception(
-                   step: :prepare_stage_input,
-                   cause: "Dependency result for stage '#{from_stage}' not found."
-                 )}
-
-              from_result ->
-                selected_data =
-                  if select_path do
-                    get_in(from_result, List.wrap(select_path))
-                  else
-                    from_result
-                  end
-
-                if is_map(selected_data) do
-                  {:ok, Map.merge(global_input, selected_data)}
-                else
-                  {:ok, Map.put(global_input, "selected_input", selected_data)}
-                end
-            end
-
-          _ ->
-            {:error,
-             Errors.ExecutionError.exception(
-               step: :prepare_stage_input,
-               cause: "Invalid input source configuration."
-             )}
-        end
-      else
-        {:ok, global_input}
-      end
-
-    case merged_input do
-      {:ok, map} when is_map(map) ->
-        {:ok, map}
-
-      {:error, _} = error ->
-        error
-
-      _ ->
-        {:error,
-         Errors.ExecutionError.exception(
-           step: :prepare_stage_input,
-           cause: "Invalid input data format."
-         )}
-    end
-  end
-
-  defp validate_input(config, input) do
-    case Map.get(config, :input_schema) do
-      nil -> {:ok, input}
-      schema -> BeamMePrompty.Validator.validate(schema, input)
-    end
-  end
-
-  defp maybe_call_llm(config, input) do
+  defp maybe_call_llm([config | _], input) do
     if config.model && config.llm_client do
       messages = MessageParser.parse(config.messages, input) || []
-      params = parse_params(config.params) || []
+      [params | _] = config.params
 
       case BeamMePrompty.LLM.completion(config.llm_client, messages, params) do
         {:ok, result} ->
@@ -298,16 +210,6 @@ defmodule BeamMePrompty.Agent.Internals do
     else
       {:ok, %{}}
     end
-  end
-
-  defp parse_params(params) do
-    Keyword.new(params, fn
-      {key, {:env, value}} ->
-        {key, System.get_env(value)}
-
-      {key, value} ->
-        {key, value}
-    end)
   end
 
   defp validate_output(config, llm_result) do
@@ -323,57 +225,7 @@ defmodule BeamMePrompty.Agent.Internals do
     end
   end
 
-  defp maybe_call_function(config, stage_input, llm_result) do
-    case Map.get(config, :call) do
-      nil ->
-        {:ok, llm_result}
-
-      %{function: fun} when is_function(fun) ->
-        try do
-          call_result = fun.(stage_input, llm_result)
-          {:ok, call_result}
-        rescue
-          e ->
-            {:error,
-             Errors.ExecutionError.exception(
-               step: :call_function,
-               cause: "Failed to call anonymous function #{Exception.message(e)}",
-               stacktrace: __STACKTRACE__
-             )}
-        end
-
-      %{module: mod, function: fun_name, args: args, as: result_key} ->
-        try do
-          selected_value = stage_input[:selected_input]
-          call_result = apply(mod, fun_name, [selected_value | args])
-
-          if result_key do
-            {:ok, Map.put(%{}, result_key, call_result)}
-          else
-            {:ok, call_result}
-          end
-        rescue
-          e ->
-            {:error,
-             Errors.ExecutionError.exception(
-               step: :call_function,
-               cause:
-                 "Failed to call function #{mod}.#{fun_name}/#{length(args) + 1}: #{Exception.message(e)}",
-               stacktrace: __STACKTRACE__
-             )}
-        end
-
-      _ ->
-        {:error,
-         Errors.ExecutionError.exception(
-           step: :call_function,
-           cause: "Invalid function call configuration."
-         )}
-    end
-  end
-
   defp handle_error({:error, {node_name, node, context, error}}, data) do
-    # Store the node information for retry
     data = %__MODULE__{data | retry_node: {node_name, node, context}}
     handle_error({:error, error}, data)
   end
@@ -386,9 +238,7 @@ defmodule BeamMePrompty.Agent.Internals do
   end
 
   defp handle_error_callback({:retry, reason, state}, data) do
-    # Check if we've exceeded max retries
     if data.retry_count >= data.retry_config.max_retries do
-      # Too many retries, stop with error
       {:stop,
        {:error,
         Errors.ExecutionError.exception(
@@ -396,11 +246,9 @@ defmodule BeamMePrompty.Agent.Internals do
           cause: "Maximum retry attempts (#{data.retry_config.max_retries}) exceeded."
         )}, data}
     else
-      # Calculate backoff time using exponential backoff
       retry_count = data.retry_count + 1
       backoff_ms = calculate_backoff(retry_count, data.retry_config)
 
-      # Set up data for retry
       updated_data = %__MODULE__{
         data
         | current_state: state.current_state,
@@ -409,15 +257,12 @@ defmodule BeamMePrompty.Agent.Internals do
           retry_started_at: System.monotonic_time(:millisecond)
       }
 
-      # Schedule a retry after backoff
       {:next_state, :retrying, updated_data, [{:state_timeout, backoff_ms, :retry_timeout}]}
     end
   end
 
   defp handle_error_callback({:restart, reason}, data) do
-    # Check if we've exceeded max retries
     if data.retry_count >= data.retry_config.max_retries do
-      # Too many retries, stop with error
       {:stop,
        {:error,
         Errors.ExecutionError.exception(
@@ -425,11 +270,9 @@ defmodule BeamMePrompty.Agent.Internals do
           cause: "Maximum retry attempts (#{data.retry_config.max_retries}) exceeded."
         )}, data}
     else
-      # Calculate backoff time using exponential backoff
       retry_count = data.retry_count + 1
       backoff_ms = calculate_backoff(retry_count, data.retry_config)
 
-      # Set up data for retry
       updated_data = %__MODULE__{
         data
         | current_state: data.initial_state,
@@ -438,7 +281,6 @@ defmodule BeamMePrompty.Agent.Internals do
           retry_started_at: System.monotonic_time(:millisecond)
       }
 
-      # Schedule a retry after backoff
       {:next_state, :retrying, updated_data, [{:state_timeout, backoff_ms, :retry_timeout}]}
     end
   end
@@ -447,9 +289,7 @@ defmodule BeamMePrompty.Agent.Internals do
     {:stop, reason, data}
   end
 
-  # Calculate backoff time with exponential backoff strategy
   defp calculate_backoff(retry_count, config) do
-    # Exponential backoff: initial * (factor ^ (retry_count - 1))
     backoff = config.backoff_initial * :math.pow(config.backoff_factor, retry_count - 1)
 
     # Add some jitter (±10%) to prevent thundering herd problem
@@ -457,7 +297,6 @@ defmodule BeamMePrompty.Agent.Internals do
     jitter = :rand.uniform(20) - 10
     backoff_with_jitter = backoff * (1 + jitter / 100)
 
-    # Ensure we don't exceed max_backoff
     trunc(min(backoff_with_jitter, config.max_backoff))
   end
 end

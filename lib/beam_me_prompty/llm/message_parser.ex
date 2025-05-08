@@ -1,43 +1,31 @@
 defmodule BeamMePrompty.LLM.MessageParser do
   @moduledoc """
-  Parses and interpolates message templates with input data.
-
-  Supports placeholders in the form `{{ expression }}`, where expressions
-  can reference map keys, list indices, and simple Elixir code evaluated
-  against the provided inputs map.
+  Parses and interpolates message mustache templates with input data.
   """
+  alias BeamMePrompty.Agent.Dsl.TextPart
+
   @doc """
   Parses a list of messages, interpolating placeholders with values from the inputs map.
   Supports nested map access, list indexing, and simple function calls.
   Handles both string and atom keys in the inputs map.
   """
-  alias BeamMePrompty.Errors
-
   def parse(messages, inputs) do
     Enum.map(messages, fn
-      %{role: role, content: message} ->
-        {role, interpolate(message, inputs)}
+      %{role: role, content: parts} ->
+        {role, Enum.map(parts, &interpolate(&1, inputs))}
     end)
   end
 
-  defp interpolate(message, inputs) do
-    Regex.replace(~r/{{\s*(.*?)\s*}}/, message, fn _, expression ->
-      evaluate_expression(expression, inputs)
-    end)
+  defp interpolate(%TextPart{text: message} = message_part, inputs) do
+    rendered_text = Mustache.render(message, normalize_keys(inputs))
+
+    %TextPart{
+      message_part
+      | text: rendered_text
+    }
   end
 
-  defp evaluate_expression(expression, inputs) do
-    try do
-      {result, _} = Code.eval_string(expression, input: normalize_keys(inputs))
-      to_string(result)
-    rescue
-      _ ->
-        raise Errors.ParsingError.exception(
-                module: __MODULE__,
-                cause: "Failed to evaluate expression: #{expression}"
-              )
-    end
-  end
+  defp interpolate(message, _inputs), do: message
 
   defp normalize_keys(map) when is_map(map) do
     map

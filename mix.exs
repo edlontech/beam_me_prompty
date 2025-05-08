@@ -22,13 +22,14 @@ defmodule BeamMePrompty.MixProject do
     [
       {:gen_state_machine, "~> 3.0"},
       {:hammox, "~> 0.7", only: :test},
+      {:mustache, "~> 0.5"},
       {:nimble_options, "~> 1.1"},
       {:open_api_spex, "~> 3.21"},
       {:plug, "~> 1.7"},
       {:req, "~> 0.5"},
       {:spark, "~> 2.2.55"},
       {:splode, "~> 0.2"},
-      {:typedstruct, "~> 0.5.3"}
+      {:typedstruct, "~> 0.5.3"},
     ]
   end
 

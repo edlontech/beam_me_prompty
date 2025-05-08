@@ -11,8 +11,11 @@
     with_input: 1,
     message: 2,
     expect_output: 1,
-    call: 1,
-    call: 2
+    temperature: 1,
+    top_p: 1,
+    frequency_penalty: 1,
+    presence_penalty: 1,
+    depends_on: 1
   ],
   export: [
     locals_without_parens: [
@@ -24,8 +27,10 @@
       with_input: 1,
       message: 2,
       expect_output: 1,
-      call: 1,
-      call: 2
+      temperature: 1,
+      top_p: 1,
+      frequency_penalty: 1,
+      presence_penalty: 1
     ]
   ]
 ]
