@@ -1,6 +1,6 @@
-defmodule BeamMePrompty.AgentExecution.Executor do
+defmodule BeamMePrompty.Agent.Executor do
   alias BeamMePrompty.DAG
-  alias BeamMePrompty.AgentExecution.ExecutorOptions
+  alias BeamMePrompty.Agent.ExecutorOptions
   alias BeamMePrompty.Errors
 
   @type state :: map()
@@ -130,8 +130,7 @@ defmodule BeamMePrompty.AgentExecution.Executor do
   end
 
   def start_link(module, input, state, opts) do
-    agent = module.agent()
-    dag = DAG.build(agent.stages)
+    dag = DAG.build(module.stages())
 
     with :ok <- DAG.validate(dag),
          {:ok, opts} <- ExecutorOptions.validate(opts) do
@@ -141,11 +140,11 @@ defmodule BeamMePrompty.AgentExecution.Executor do
   end
 
   defp args(init, nil) do
-    [BeamMePrompty.Agents.Internals, init, []]
+    [BeamMePrompty.Agent.Internals, init, []]
   end
 
   defp args(init, name) do
-    [name, BeamMePrompty.Agents.Internals, init, []]
+    [name, BeamMePrompty.Agent.Internals, init, []]
   end
 
   # Helper function to poll for completion with timeout

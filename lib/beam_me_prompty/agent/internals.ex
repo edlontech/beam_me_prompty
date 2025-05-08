@@ -1,4 +1,4 @@
-defmodule BeamMePrompty.AgentExecution.Internals do
+defmodule BeamMePrompty.Agent.Internals do
   use GenStateMachine, callback_mode: :state_functions
 
   defstruct [
@@ -192,7 +192,7 @@ defmodule BeamMePrompty.AgentExecution.Internals do
   end
 
   defp execute_stage(stage, exec_context) do
-    config = stage.config
+    config = stage.llm
 
     config =
       Map.replace_lazy(config, :llm_client, fn client ->
