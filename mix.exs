@@ -22,14 +22,16 @@ defmodule BeamMePrompty.MixProject do
     [
       {:gen_state_machine, "~> 3.0"},
       {:hammox, "~> 0.7", only: :test},
-      {:open_api_spex, "~> 3.21"},
       {:nimble_options, "~> 1.1"},
+      {:open_api_spex, "~> 3.21"},
       {:plug, "~> 1.7"},
       {:req, "~> 0.5"},
-      {:splode, "~> 0.2"}
+      {:spark, "~> 2.2.55"},
+      {:splode, "~> 0.2"},
+      {:typedstruct, "~> 0.5.3"}
     ]
   end
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
-  defp elixirc_paths(_), do: ["lib"]
+  defp elixirc_paths(_), do: ["lib", "test/support"]
 end
