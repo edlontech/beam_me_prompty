@@ -12,8 +12,8 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
   alias BeamMePrompty.LLM.GoogleGeminiOpts
 
   @impl true
-  def completion(messages, opts) do
-    with {:ok, opts} <- GoogleGeminiOpts.validate(opts),
+  def completion(model, messages, opts) do
+    with {:ok, opts} <- GoogleGeminiOpts.validate(model, opts),
          {:ok, response} <- call_api(messages, opts) do
       {:ok, response}
     else

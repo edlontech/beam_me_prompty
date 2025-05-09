@@ -45,12 +45,15 @@ defmodule BeamMePrompty.Agent.Dsl do
     field :top_k, integer() | nil
     field :frequency_penalty, float() | nil
     field :presence_penalty, float() | nil
+    field :thinking_budget, integer() | nil
     field :structured_response, OpenApiSpex.Schema.t() | nil
+    field :api_key, String.t() | nil
+    field :other_params, map() | nil
   end
 
   typedstruct module: LLM do
     field :model, String.t()
-    field :llm_client, module()
+    field :llm_client, {module(), keyword()}
     field :params, LLMParams.t() | nil
     field :messages, list(Message.t())
     field :tools, list(Tool.t())
@@ -137,6 +140,10 @@ defmodule BeamMePrompty.Agent.Dsl do
           {:custom, BeamMePrompty.Commons.CustomValidations, :validate_float_range, [-2.0, 2.0]},
         doc: "Frequency penalty."
       ],
+      thinking_budget: [
+        type: :non_neg_integer,
+        doc: "Maximum number of tokens for the thinking budget."
+      ],
       presence_penalty: [
         type:
           {:custom, BeamMePrompty.Commons.CustomValidations, :validate_float_range, [-2.0, 2.0]},
@@ -145,6 +152,14 @@ defmodule BeamMePrompty.Agent.Dsl do
       structured_response: [
         type: {:struct, OpenApiSpex.Schema},
         doc: "Schema that the LLM should follow for structured responses"
+      ],
+      api_key: [
+        type: {:or, [:string, {:fun, [], :string}]},
+        doc: "API key for the LLM client."
+      ],
+      other_params: [
+        type: :map,
+        doc: "Other parameters for the LLM client."
       ]
     ]
   }
@@ -165,7 +180,7 @@ defmodule BeamMePrompty.Agent.Dsl do
         type: :string
       ],
       llm_client: [
-        type: :module,
+        type: {:behaviour, BeamMePrompty.LLM},
         required: true,
         doc: "The LLM client module to use."
       ]

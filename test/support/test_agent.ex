@@ -11,6 +11,7 @@ defmodule BeamMePrompty.TestAgent do
           top_p 0.9
           frequency_penalty 0.1
           presence_penalty 0.2
+          api_key fn -> System.get_env("TEST_API_KEY") end
         end
 
         message :system, [%TextPart{type: :text, text: "You are a helpful assistant."}]

@@ -27,13 +27,13 @@ defmodule BeamMePrompty.LLM do
   It should aim to return a structured map, potentially conforming to a
   schema if requested via options.
   """
-  @callback completion(messages :: [message()], opts :: completion_opts()) ::
+  @callback completion(model :: String.t(), messages :: [message()], opts :: completion_opts()) ::
               {:ok, response} | {:error, any()}
 
   @doc """
-  A convenience function to call the `completion/2` callback on a specific client module.
+  A convenience function to call the `completion/3` callback on a specific client module.
   """
-  def completion(client_module, messages, opts \\ []) do
-    client_module.completion(messages, opts)
+  def completion(client_module, model, messages, opts \\ []) do
+    client_module.completion(model, messages, opts)
   end
 end

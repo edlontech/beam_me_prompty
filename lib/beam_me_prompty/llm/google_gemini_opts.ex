@@ -53,6 +53,12 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
             plug: [
               type: {:tuple, [:atom, :atom]},
               doc: "Plugins to use for the request. This is useful for testing."
+            ],
+            tools: [
+              type: :non_empty_keyword_list,
+              keys: [
+                function_declarations: [required: true, type: {:list, :any}]
+              ]
             ]
           )
 
@@ -62,17 +68,40 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
   @type t() :: [unquote(NimbleOptions.option_typespec(@schema))]
 
   alias BeamMePrompty.LLM.Errors.InvalidConfig
+  alias BeamMePrompty.Agent.Dsl.LLMParams
 
-  @doc """
-  Validates the given configuration options and returns the parsed configuration.
-  """
-  def validate(config) do
+  @spec validate(String.t(), LLMParams.t()) ::
+          {:ok, t()} | {:error, InvalidConfig.t()}
+  def validate(model, config) do
+    config =
+      [
+        max_output_tokens: config.max_tokens,
+        temperature: config.temperature,
+        top_p: config.top_p,
+        top_k: config.top_k,
+        key: api_key(config.api_key),
+        response_schema: config.structured_response,
+        thinking_budget: config.thinking_budget,
+        tools: get_in(config.other_params.tools),
+        model: model
+      ]
+      |> Keyword.reject(fn {_, v} -> is_nil(v) end)
+
     case NimbleOptions.validate(config, @schema) do
       {:ok, parsed_config} ->
         {:ok, parsed_config}
 
       {:error, error} ->
         {:error, InvalidConfig.exception(%{module: __MODULE__, cause: error.message})}
+    end
+  end
+
+  defp api_key(key) when is_binary(key), do: key
+
+  defp api_key(func_key) when is_function(func_key) do
+    case func_key.() do
+      key when is_binary(key) -> key
+      _ -> nil
     end
   end
 end

@@ -200,7 +200,7 @@ defmodule BeamMePrompty.Agent.Internals do
       messages = MessageParser.parse(config.messages, input) || []
       [params | _] = config.params
 
-      case BeamMePrompty.LLM.completion(config.llm_client, messages, params) do
+      case BeamMePrompty.LLM.completion(config.llm_client, config.model, messages, params) do
         {:ok, result} ->
           {:ok, result}
 

@@ -21,7 +21,8 @@
     module: 1,
     name: 1,
     description: 1,
-    parameters: 1
+    parameters: 1,
+    api_key: 1
   ],
   export: [
     locals_without_parens: [
@@ -42,7 +43,8 @@
       module: 1,
       name: 1,
       description: 1,
-      parameters: 1
+      parameters: 1,
+      api_key: 1
     ]
   ]
 ]

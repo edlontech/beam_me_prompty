@@ -13,7 +13,7 @@ defmodule BeamMePrompty.AgentTest do
       input = %{"text" => "bonk bonk bonk"}
 
       BeamMePrompty.FakeLlmClient
-      |> expect(:completion, fn messages, opts ->
+      |> expect(:completion, fn _, messages, opts ->
         assert opts.temperature == 0.5
         assert opts.top_p == 0.9
         assert opts.frequency_penalty == 0.1
@@ -26,13 +26,13 @@ defmodule BeamMePrompty.AgentTest do
 
         {:ok, %{"result" => "wassup"}}
       end)
-      |> expect(:completion, fn messages, _opts ->
+      |> expect(:completion, fn _, messages, _opts ->
         assert [user: "Analyze this further: wassup", system: "You are a helpful assistant."] ==
                  messages
 
         {:ok, "Yes, it's a platypus"}
       end)
-      |> expect(:completion, fn _messages, _opts ->
+      |> expect(:completion, fn _, _messages, _opts ->
         {:ok, "And it's Perry the Platypus!"}
       end)
 
