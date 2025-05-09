@@ -31,6 +31,13 @@ defmodule BeamMePrompty.Agent.Dsl do
     field :content, list(TextPart.t() | FilePart.t() | DataPart.t())
   end
 
+  typedstruct module: Tool do
+    field :module, module()
+    field :name, String.t()
+    field :description, String.t()
+    field :parameters, OpenApiSpex.Schema.t()
+  end
+
   typedstruct module: LLMParams do
     field :max_tokens, integer() | nil
     field :temperature, float() | nil
@@ -46,6 +53,7 @@ defmodule BeamMePrompty.Agent.Dsl do
     field :llm_client, module()
     field :params, LLMParams.t() | nil
     field :messages, list(Message.t())
+    field :tools, list(Tool.t())
   end
 
   typedstruct module: Stage do
@@ -53,6 +61,34 @@ defmodule BeamMePrompty.Agent.Dsl do
     field :depends_on, list(String.t()) | nil
     field :llm, LLM.t() | nil
   end
+
+  @tool_entity %Spark.Dsl.Entity{
+    name: :tool,
+    target: Tool,
+    describe: "Defines a tool that the agent can use.",
+    schema: [
+      name: [
+        type: :string,
+        required: true,
+        doc: "Name of the tool."
+      ],
+      module: [
+        type: :module,
+        required: true,
+        doc: "Module implementing the tool."
+      ],
+      description: [
+        type: :string,
+        required: true,
+        doc: "Description of the tool."
+      ],
+      parameters: [
+        type: {:struct, OpenApiSpex.Schema},
+        required: true,
+        doc: "Parameters for the tool."
+      ]
+    ]
+  }
 
   @message_entity %Spark.Dsl.Entity{
     name: :message,
@@ -120,7 +156,8 @@ defmodule BeamMePrompty.Agent.Dsl do
     target: LLM,
     entities: [
       params: [@llm_params_entity],
-      messages: [@message_entity]
+      messages: [@message_entity],
+      tools: [@tool_entity]
     ],
     schema: [
       model: [

@@ -16,7 +16,12 @@
     frequency_penalty: 1,
     presence_penalty: 1,
     structured_response: 1,
-    depends_on: 1
+    depends_on: 1,
+    tool: 1,
+    module: 1,
+    name: 1,
+    description: 1,
+    parameters: 1
   ],
   export: [
     locals_without_parens: [
@@ -32,7 +37,12 @@
       top_p: 1,
       frequency_penalty: 1,
       presence_penalty: 1,
-      structured_response: 1
+      structured_response: 1,
+      tool: 1,
+      module: 1,
+      name: 1,
+      description: 1,
+      parameters: 1
     ]
   ]
 ]

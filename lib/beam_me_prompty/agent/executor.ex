@@ -20,7 +20,7 @@ defmodule BeamMePrompty.Agent.Executor do
 
   defmacro __using__(_opts) do
     quote location: :keep do
-      @behaviour BeamMePrompty.Agents.Executor
+      @behaviour BeamMePrompty.Agent.Executor
 
       alias BeamMePrompty.Errors.External, as: ExternalError
 
