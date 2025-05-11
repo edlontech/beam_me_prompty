@@ -54,7 +54,7 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
   end
 
   defp parse_response({:ok, %Req.Response{status: 200, body: body}}) do
-    {:ok, get_candidate(body)}
+    get_candidate(body)
   end
 
   defp parse_response({:ok, %Req.Response{status: status, body: body}})
@@ -66,10 +66,47 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
     {:error, UnexpectedLLMResponse.exception(module: __MODULE__, status: 500, cause: body)}
   end
 
+  defp get_candidate_content(%{"text" => text_content}) when is_binary(text_content) do
+    {:ok, text_content}
+  end
+
+  defp get_candidate_content(part_map) when is_map(part_map) do
+    {:ok, part_map}
+  end
+
+  defp get_candidate_content(unknown_part) do
+    {:error,
+     UnexpectedLLMResponse.exception(
+       module: __MODULE__,
+       cause: "Unknown structure for content part in LLM response: #{inspect(unknown_part)}"
+     )}
+  end
+
+  # Extracts content from the first candidate's first part
   defp get_candidate(%{
-         "candidates" => [%{"content" => %{"parts" => [%{"text" => text} | _]}} | _]
-       }),
-       do: text
+         "candidates" => [
+           %{"content" => %{"parts" => [first_part | _]}} | _
+         ]
+       }) do
+    get_candidate_content(first_part)
+  end
+
+  defp get_candidate(%{"candidates" => []} = body) do
+    {:error,
+     UnexpectedLLMResponse.exception(
+       module: __MODULE__,
+       cause: "LLM response contains no candidates. Body: #{inspect(body)}"
+     )}
+  end
+
+  defp get_candidate(body) do
+    {:error,
+     UnexpectedLLMResponse.exception(
+       module: __MODULE__,
+       cause:
+         "Malformed or missing 'candidates' list/structure in LLM response. Body: #{inspect(body)}"
+     )}
+  end
 
   defp client(opts) do
     Req.new(
@@ -82,22 +119,18 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
   end
 
   defp prepare_messages(keyword_messages) do
-    # 1. Process system instructions
     system_parts = Keyword.get(keyword_messages, :system, [])
 
     system_instruction =
       if Enum.empty?(system_parts) do
         nil
       else
-        # Concatenate all system part texts into one string for the single system instruction part
         text = Enum.map_join(system_parts, "", &format_part_to_text/1)
         %{parts: [%{text: text}]}
       end
 
-    # Initialize an empty list for Gemini API contents
     gemini_api_contents = []
 
-    # 2. Process user messages
     user_parts = Keyword.get(keyword_messages, :user, [])
 
     gemini_api_contents =
@@ -108,7 +141,6 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
         gemini_api_contents
       end
 
-    # 3. Process assistant messages (if any)
     assistant_parts = Keyword.get(keyword_messages, :assistant, [])
 
     gemini_api_contents =
@@ -119,7 +151,6 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
         gemini_api_contents
       end
 
-    # 4. Build final payload
     payload = %{}
 
     payload =
@@ -127,14 +158,9 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
         do: Map.put(payload, :system_instruction, system_instruction),
         else: payload
 
-    # Add contents, ensuring it's not an empty list if there were no user/assistant messages,
-    # as Gemini API requires `contents` to be non-empty.
-    # If gemini_api_contents is empty here, the API call will likely fail, which is expected
-    # if no actual content messages (user/assistant) are provided.
     Map.put(payload, :contents, gemini_api_contents)
   end
 
-  # Helper function to format a Dsl.Part into text for the Gemini API
   defp format_part_to_text(part) do
     alias BeamMePrompty.Agent.Dsl.{TextPart, DataPart, FilePart}
 
@@ -143,10 +169,8 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
         text_content
 
       %DataPart{data: data_content} ->
-        # Serialize map to JSON string. Assumes Jason is available.
         case Jason.encode(data_content) do
           {:ok, json_string} -> json_string
-          # Or handle error appropriately, e.g., log and return empty
           {:error, _} -> ""
         end
 
