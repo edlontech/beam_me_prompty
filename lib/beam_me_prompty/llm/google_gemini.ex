@@ -13,6 +13,8 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
 
   @impl true
   def completion(model, messages, opts) do
+    dbg(messages)
+
     with {:ok, opts} <- GoogleGeminiOpts.validate(model, opts),
          {:ok, response} <- call_api(messages, opts) do
       {:ok, response}
@@ -79,35 +81,83 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
     )
   end
 
-  defp prepare_messages(prompt) do
-    case List.wrap(prompt) do
-      [message] ->
-        [text_content(message)]
+  defp prepare_messages(keyword_messages) do
+    # 1. Process system instructions
+    system_parts = Keyword.get(keyword_messages, :system, [])
 
-      [maybe_system | messages] ->
-        [text_content(maybe_system, :system) | Enum.map(messages, &text_content/1)]
-    end
-    |> Enum.split_with(fn %{role: role} -> role == [:system, "system"] end)
-    |> then(fn {system_messages, other_messages} ->
-      merged_system_message =
-        %{
-          role: :system,
-          parts: [
-            %{
-              text: Enum.map_join(system_messages, "\n", fn %{parts: [%{text: text}]} -> text end)
-            }
-          ]
-        }
+    system_instruction =
+      if Enum.empty?(system_parts) do
+        nil
+      else
+        # Concatenate all system part texts into one string for the single system instruction part
+        text = Enum.map_join(system_parts, "", &format_part_to_text/1)
+        %{parts: [%{text: text}]}
+      end
 
-      %{
-        system_instruction: merged_system_message,
-        contents: other_messages
-      }
-    end)
+    # Initialize an empty list for Gemini API contents
+    gemini_api_contents = []
+
+    # 2. Process user messages
+    user_parts = Keyword.get(keyword_messages, :user, [])
+
+    gemini_api_contents =
+      if not Enum.empty?(user_parts) do
+        text = Enum.map_join(user_parts, "", &format_part_to_text/1)
+        gemini_api_contents ++ [%{role: "user", parts: [%{text: text}]}]
+      else
+        gemini_api_contents
+      end
+
+    # 3. Process assistant messages (if any)
+    assistant_parts = Keyword.get(keyword_messages, :assistant, [])
+
+    gemini_api_contents =
+      if not Enum.empty?(assistant_parts) do
+        text = Enum.map_join(assistant_parts, "", &format_part_to_text/1)
+        gemini_api_contents ++ [%{role: "model", parts: [%{text: text}]}]
+      else
+        gemini_api_contents
+      end
+
+    # 4. Build final payload
+    payload = %{}
+
+    payload =
+      if system_instruction,
+        do: Map.put(payload, :system_instruction, system_instruction),
+        else: payload
+
+    # Add contents, ensuring it's not an empty list if there were no user/assistant messages,
+    # as Gemini API requires `contents` to be non-empty.
+    # If gemini_api_contents is empty here, the API call will likely fail, which is expected
+    # if no actual content messages (user/assistant) are provided.
+    Map.put(payload, :contents, gemini_api_contents)
   end
 
-  defp text_content(text, default_role \\ :user)
-  defp text_content(%{role: role, content: text}, _), do: %{role: role, parts: [%{text: text}]}
-  defp text_content({role, text}, _), do: %{role: role, parts: [%{text: text}]}
-  defp text_content(text, role), do: %{role: role, parts: [%{text: text}]}
+  # Helper function to format a Dsl.Part into text for the Gemini API
+  defp format_part_to_text(part) do
+    alias BeamMePrompty.Agent.Dsl.{TextPart, DataPart, FilePart}
+
+    case part do
+      %TextPart{text: text_content} ->
+        text_content
+
+      %DataPart{data: data_content} ->
+        # Serialize map to JSON string. Assumes Jason is available.
+        case Jason.encode(data_content) do
+          {:ok, json_string} -> json_string
+          # Or handle error appropriately, e.g., log and return empty
+          {:error, _} -> ""
+        end
+
+      %FilePart{} ->
+        # Files are ignored in this text-only version.
+        # For multimodal, this would need to handle file URIs or bytes.
+        ""
+
+      _ ->
+        # Unknown part type
+        ""
+    end
+  end
 end

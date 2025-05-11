@@ -6,11 +6,13 @@ defmodule BeamMePrompty.Agent.Dsl do
   @type role() :: :user | :assistant | :system
 
   typedstruct module: TextPart do
+    @derive Jason.Encoder
     field :type, :text
     field :text, String.t()
   end
 
   typedstruct module: FilePart do
+    @derive Jason.Encoder
     field :type, :file
 
     field :file, %{
@@ -22,6 +24,7 @@ defmodule BeamMePrompty.Agent.Dsl do
   end
 
   typedstruct module: DataPart do
+    @derive Jason.Encoder
     field :type, :data
     field :data, map()
   end

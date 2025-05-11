@@ -5,7 +5,7 @@ defmodule BeamMePrompty.GeminiAgent do
 
   agent do
     stage :first_stage do
-      llm "test-model", BeamMePrompty.LLM.GoogleGemini do
+      llm "gemini-2.0-flash", BeamMePrompty.LLM.GoogleGemini do
         with_params do
           api_key fn -> System.get_env("INTELLIGENCE_GOOGLE_AI_API_KEY") end
         end
