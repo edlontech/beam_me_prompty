@@ -10,11 +10,10 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
   alias BeamMePrompty.LLM.Errors.InvalidRequest
   alias BeamMePrompty.LLM.Errors.UnexpectedLLMResponse
   alias BeamMePrompty.LLM.GoogleGeminiOpts
+  alias BeamMePrompty.Agent.Dsl.{TextPart, DataPart, FilePart}
 
   @impl true
   def completion(model, messages, opts) do
-    dbg(messages)
-
     with {:ok, opts} <- GoogleGeminiOpts.validate(model, opts),
          {:ok, response} <- call_api(messages, opts) do
       {:ok, response}
@@ -82,7 +81,6 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
      )}
   end
 
-  # Extracts content from the first candidate's first part
   defp get_candidate(%{
          "candidates" => [
            %{"content" => %{"parts" => [first_part | _]}} | _
@@ -118,70 +116,64 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
     )
   end
 
-  defp prepare_messages(keyword_messages) do
-    system_parts = Keyword.get(keyword_messages, :system, [])
-
-    system_instruction =
-      if Enum.empty?(system_parts) do
-        nil
-      else
-        text = Enum.map_join(system_parts, "", &format_part_to_text/1)
-        %{parts: [%{text: text}]}
-      end
-
-    gemini_api_contents = []
-
-    user_parts = Keyword.get(keyword_messages, :user, [])
-
-    gemini_api_contents =
-      if not Enum.empty?(user_parts) do
-        text = Enum.map_join(user_parts, "", &format_part_to_text/1)
-        gemini_api_contents ++ [%{role: "user", parts: [%{text: text}]}]
-      else
-        gemini_api_contents
-      end
-
-    assistant_parts = Keyword.get(keyword_messages, :assistant, [])
-
-    gemini_api_contents =
-      if not Enum.empty?(assistant_parts) do
-        text = Enum.map_join(assistant_parts, "", &format_part_to_text/1)
-        gemini_api_contents ++ [%{role: "model", parts: [%{text: text}]}]
-      else
-        gemini_api_contents
-      end
-
-    payload = %{}
-
-    payload =
-      if system_instruction,
-        do: Map.put(payload, :system_instruction, system_instruction),
-        else: payload
-
-    Map.put(payload, :contents, gemini_api_contents)
-  end
-
-  defp format_part_to_text(part) do
-    alias BeamMePrompty.Agent.Dsl.{TextPart, DataPart, FilePart}
-
+  defp format_dsl_part_to_gemini_api_part(part) do
     case part do
-      %TextPart{text: text_content} ->
-        text_content
+      %TextPart{text: text_content} when is_binary(text_content) ->
+        %{text: text_content}
 
       %DataPart{data: data_content} ->
-        case Jason.encode(data_content) do
-          {:ok, json_string} -> json_string
-          {:error, _} -> ""
+        Jason.encode(data_content)
+        |> case do
+          {:ok, json_string} -> %{text: json_string}
+          {:error, _} -> nil
         end
 
-      %FilePart{} ->
-        # Files are ignored in this text-only version.
-        # For multimodal, this would need to handle file URIs or bytes.
-        ""
+      %FilePart{file: %{bytes: bytes, mime_type: mime_type}}
+      when not is_nil(bytes) and not is_nil(mime_type) ->
+        %{inlineData: %{mimeType: mime_type, data: Base.encode64(bytes)}}
 
       _ ->
-        # Unknown part type
-        ""
+        nil
+    end
+  end
+
+  defp prepare_messages(keyword_messages) do
+    gemini_system_api_parts =
+      Keyword.get(keyword_messages, :system, [])
+      |> Enum.map(&format_dsl_part_to_gemini_api_part/1)
+      |> Enum.reject(&is_nil(&1))
+
+    system_instruction =
+      case gemini_system_api_parts do
+        [] -> nil
+        parts_list -> %{parts: parts_list}
+      end
+
+    roles_to_process = [
+      {:user, "user"},
+      {:assistant, "model"}
+    ]
+
+    gemini_api_contents =
+      Enum.flat_map(roles_to_process, fn {dsl_role_key, api_role_name} ->
+        dsl_parts_for_role = Keyword.get(keyword_messages, dsl_role_key, [])
+
+        api_parts_for_role =
+          dsl_parts_for_role
+          |> Enum.map(&format_dsl_part_to_gemini_api_part/1)
+          |> Enum.reject(&is_nil(&1))
+
+        if Enum.empty?(api_parts_for_role) do
+          []
+        else
+          [%{role: api_role_name, parts: api_parts_for_role}]
+        end
+      end)
+
+    if system_instruction do
+      %{system_instruction: system_instruction, contents: gemini_api_contents}
+    else
+      %{contents: gemini_api_contents}
     end
   end
 end
