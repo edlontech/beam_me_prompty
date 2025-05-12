@@ -12,10 +12,19 @@ defmodule BeamMePrompty.LLM do
   @type message :: binary() | {roles(), binary()}
 
   @typedoc "Represents the response from an LLM provider."
-  @type response :: binary() | map()
+  @type response :: binary() | function_call_request() | map()
 
   @typedoc "Options passed to the completion function."
   @type completion_opts :: keyword()
+
+  @typedoc "Request from the LLM to execute a function."
+  @type function_call_request :: %{
+          function_call: %{
+            optional(:id) => String.t(),
+            optional(:name) => String.t(),
+            optional(:arguments) => map()
+          }
+        }
 
   @doc """
   Generates a completion based on the provided messages and options.
@@ -27,13 +36,18 @@ defmodule BeamMePrompty.LLM do
   It should aim to return a structured map, potentially conforming to a
   schema if requested via options.
   """
-  @callback completion(model :: String.t(), messages :: [message()], opts :: completion_opts()) ::
+  @callback completion(
+              model :: String.t(),
+              messages :: [message()],
+              tools :: [any()],
+              opts :: completion_opts()
+            ) ::
               {:ok, response} | {:error, any()}
 
   @doc """
-  A convenience function to call the `completion/3` callback on a specific client module.
+  A convenience function to call the `completion/4` callback on a specific client module.
   """
-  def completion(client_module, model, messages, opts \\ []) do
-    client_module.completion(model, messages, opts)
+  def completion(client_module, model, messages, tools \\ [], opts \\ []) do
+    client_module.completion(model, messages, tools, opts)
   end
 end

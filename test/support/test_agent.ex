@@ -24,12 +24,11 @@ defmodule BeamMePrompty.TestAgent do
         message :system, [%TextPart{type: :text, text: "You are a helpful assistant."}]
         message :user, [%TextPart{type: :text, text: "Call the TestTool"}]
 
-        tool do
-          name "test_tool"
+        tool :test_tool do
           description "Test tool description"
           module BeamMePrompty.TestTool
 
-          parameters %OpenApiSpex.Schema{
+          parameters %{
             type: :object,
             properties: %{
               val1: %{

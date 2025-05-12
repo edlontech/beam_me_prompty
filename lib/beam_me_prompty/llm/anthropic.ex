@@ -1,14 +1,15 @@
 defmodule BeamMePrompty.LLM.Anthropic do
   @behaviour BeamMePrompty.LLM
 
+  alias BeamMePrompty.Agent.Dsl.{TextPart, DataPart, FilePart}
   alias BeamMePrompty.Errors
   alias BeamMePrompty.LLM.Errors.InvalidRequest
   alias BeamMePrompty.LLM.Errors.UnexpectedLLMResponse
   alias BeamMePrompty.LLM.AnthropicOpts
 
   @impl true
-  def completion(messages, opts) do
-    with {:ok, opts} <- AnthropicOpts.validate(opts),
+  def completion(model, messages, tools, opts) do
+    with {:ok, opts} <- AnthropicOpts.validate(model, tools, opts),
          {:ok, response} <- call_api(messages, opts) do
       {:ok, response}
     else
@@ -18,21 +19,38 @@ defmodule BeamMePrompty.LLM.Anthropic do
   end
 
   defp call_api(messages, opts) do
-    {system_prompt, user_messages} = prepare_messages(messages)
+    prepared_data = prepare_messages(messages)
 
-    payload = %{
+    payload_base = %{
       model: opts[:model],
-      max_tokens: opts[:max_output_tokens],
+      max_tokens: opts[:max_tokens],
       temperature: opts[:temperature],
       top_k: opts[:top_k],
-      top_p: opts[:top_p],
-      thinking: %{
-        budget_tokens: opts[:thinking_budget_tokens],
-        type: if(opts[:thinking], do: "enabled", else: "disabled")
-      },
-      system: system_prompt,
-      messages: user_messages
+      top_p: opts[:top_p]
     }
+
+    thinking_budget =
+      if opts[:thinking] do
+        %{budget_tokens: opts[:thinking_budget_tokens], type: "enabled"}
+      else
+        %{}
+      end
+
+    tooling = tool_choice(opts[:tools])
+
+    payload =
+      payload_base
+      |> Map.put(:messages, prepared_data[:messages])
+      |> then(fn p ->
+        if system_prompt = prepared_data[:system] do
+          Map.put(p, :system, system_prompt)
+        else
+          p
+        end
+      end)
+      |> Map.merge(tooling)
+      |> Map.merge(thinking_budget)
+      |> Map.reject(fn {_k, v} -> is_nil(v) end)
 
     client(opts)
     |> Req.post(url: "/messages", json: payload)
@@ -52,7 +70,27 @@ defmodule BeamMePrompty.LLM.Anthropic do
     {:error, UnexpectedLLMResponse.exception(module: __MODULE__, status: 500, cause: body)}
   end
 
-  defp get_content(%{"content" => [%{"text" => text} | _]}), do: text
+  defp tool_choice(nil), do: %{}
+
+  defp tool_choice(tools) do
+    tools =
+      Enum.map(tools.function_declarations, fn function_declaration ->
+        %{
+          name: function_declaration.name,
+          description: function_declaration.description,
+          input_schema: function_declaration.parameters
+        }
+      end)
+
+    %{tools: tools}
+  end
+
+  defp get_content(%{"content" => content_list}) do
+    case Enum.find(content_list, &(&1["type"] == "text")) do
+      %{"text" => text} -> text
+      _ -> ""
+    end
+  end
 
   defp client(opts) do
     Req.new(
@@ -65,21 +103,83 @@ defmodule BeamMePrompty.LLM.Anthropic do
     )
   end
 
-  defp prepare_messages(messages) do
-    List.wrap(messages)
-    |> Enum.split_with(fn %{role: role} -> role in [:system, "system"] end)
-    |> then(fn {system_messages, other_messages} ->
-      system_prompt =
-        Enum.map_join(system_messages, "\n", fn %{content: content} -> content end)
+  defp format_dsl_part(part) do
+    case part do
+      %TextPart{text: text_content} when is_binary(text_content) ->
+        %{type: "text", text: text_content}
 
-      user_messages =
-        Enum.map(other_messages, fn
-          %{role: role, content: content} -> %{role: role, content: content}
-          {role, content} -> %{role: role, content: content}
-          content -> %{role: "user", content: content}
-        end)
+      %DataPart{data: data_content} ->
+        Jason.encode(data_content)
+        |> case do
+          {:ok, json_string} -> %{type: "text", text: json_string}
+          {:error, _} -> nil
+        end
 
-      {system_prompt, user_messages}
-    end)
+      %FilePart{file: %{bytes: bytes, mime_type: mime_type}}
+      when not is_nil(bytes) and not is_nil(mime_type) ->
+        %{
+          type: "image",
+          source: %{
+            type: "base64",
+            media_type: mime_type,
+            data: Base.encode64(bytes)
+          }
+        }
+
+      _ ->
+        nil
+    end
+  end
+
+  defp prepare_messages(keyword_messages) do
+    system_dsl_parts = Keyword.get(keyword_messages, :system, [])
+
+    system_string =
+      system_dsl_parts
+      |> Enum.map(fn
+        %TextPart{text: text_content} ->
+          text_content
+
+        %DataPart{data: data_content} ->
+          Jason.encode(data_content) |> elem(1)
+
+        _ ->
+          ""
+      end)
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join("\n")
+      |> case do
+        "" -> nil
+        s -> s
+      end
+
+    roles_to_process = [
+      {:user, "user"},
+      {:assistant, "assistant"}
+    ]
+
+    messages_list =
+      Enum.flat_map(roles_to_process, fn {dsl_role_key, api_role_name} ->
+        dsl_parts_for_role = Keyword.get(keyword_messages, dsl_role_key, [])
+
+        formatted_parts_for_role =
+          dsl_parts_for_role
+          |> Enum.map(&format_dsl_part/1)
+          |> Enum.reject(&is_nil(&1))
+
+        if Enum.empty?(formatted_parts_for_role) do
+          []
+        else
+          [%{role: api_role_name, content: formatted_parts_for_role}]
+        end
+      end)
+
+    output = %{messages: messages_list}
+
+    if system_string do
+      Map.put(output, :system, system_string)
+    else
+      output
+    end
   end
 end

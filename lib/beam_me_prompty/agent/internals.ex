@@ -200,7 +200,13 @@ defmodule BeamMePrompty.Agent.Internals do
       messages = MessageParser.parse(config.messages, input) || []
       [params | _] = config.params
 
-      case BeamMePrompty.LLM.completion(config.llm_client, config.model, messages, params) do
+      case BeamMePrompty.LLM.completion(
+             config.llm_client,
+             config.model,
+             messages,
+             config.tools,
+             params
+           ) do
         {:ok, result} ->
           {:ok, result}
 
@@ -209,19 +215,6 @@ defmodule BeamMePrompty.Agent.Internals do
       end
     else
       {:ok, %{}}
-    end
-  end
-
-  defp validate_output(config, llm_result) do
-    case Map.get(config, :output_schema) do
-      nil ->
-        {:ok, llm_result}
-
-      schema when is_map(schema) and is_map(llm_result) ->
-        case BeamMePrompty.Validator.validate(schema, llm_result) do
-          {:ok, validated_data} -> {:ok, validated_data}
-          {:error, _reason} = error -> error
-        end
     end
   end
 

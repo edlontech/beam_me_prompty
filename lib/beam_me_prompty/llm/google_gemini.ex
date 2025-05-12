@@ -13,8 +13,8 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
   alias BeamMePrompty.Agent.Dsl.{TextPart, DataPart, FilePart}
 
   @impl true
-  def completion(model, messages, opts) do
-    with {:ok, opts} <- GoogleGeminiOpts.validate(model, opts),
+  def completion(model, messages, tools, opts) do
+    with {:ok, opts} <- GoogleGeminiOpts.validate(model, tools, opts),
          {:ok, response} <- call_api(messages, opts) do
       {:ok, response}
     else
@@ -45,7 +45,14 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
         generation_config
       end
 
-    payload = Map.merge(prepare_messages(messages), %{generation_config: generation_config})
+    base_payload = Map.merge(prepare_messages(messages), %{generation_config: generation_config})
+
+    payload =
+      if tools_config = opts[:tools] do
+        Map.put(base_payload, :tools, [Map.new(tools_config)])
+      else
+        base_payload
+      end
 
     client(opts)
     |> Req.post(url: "/models/{model}:generateContent", json: payload)

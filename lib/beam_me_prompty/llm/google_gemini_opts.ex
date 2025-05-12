@@ -68,11 +68,11 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
   @type t() :: [unquote(NimbleOptions.option_typespec(@schema))]
 
   alias BeamMePrompty.LLM.Errors.InvalidConfig
-  alias BeamMePrompty.Agent.Dsl.LLMParams
+  alias BeamMePrompty.Agent.Dsl.{LLMParams, Tool}
 
-  @spec validate(String.t(), LLMParams.t()) ::
+  @spec validate(String.t(), Tool.t(), LLMParams.t()) ::
           {:ok, t()} | {:error, InvalidConfig.t()}
-  def validate(model, config) do
+  def validate(model, tools, config) do
     config =
       [
         max_output_tokens: config.max_tokens,
@@ -82,7 +82,7 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
         key: api_key(config.api_key),
         response_schema: config.structured_response,
         thinking_budget: config.thinking_budget,
-        tools: get_in(config.other_params.tools),
+        tools: parse_dsl_tools(tools),
         model: model
       ]
       |> Keyword.reject(fn {_, v} -> is_nil(v) end)
@@ -103,5 +103,22 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
       key when is_binary(key) -> key
       _ -> nil
     end
+  end
+
+  defp parse_dsl_tools(nil), do: nil
+
+  defp parse_dsl_tools([]), do: nil
+
+  defp parse_dsl_tools(tools) do
+    [
+      function_declarations:
+        Enum.map(tools, fn tool ->
+          %{
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parameters
+          }
+        end)
+    ]
   end
 end

@@ -1,9 +1,11 @@
 defmodule BeamMePrompty.Agent.Dsl do
   use TypedStruct
 
-  @type part_type() :: :text | :file | :data
+  @type part_type() :: :text | :file | :data | :function_result
 
   @type role() :: :user | :assistant | :system
+
+  @type openapi_schema() :: map()
 
   typedstruct module: TextPart do
     @derive Jason.Encoder
@@ -29,16 +31,23 @@ defmodule BeamMePrompty.Agent.Dsl do
     field :data, map()
   end
 
+  typedstruct module: FunctionResultPart do
+    @derive Jason.Encoder
+    field :id, String.t() | nil
+    field :name, String.t()
+    field :result, any()
+  end
+
   typedstruct module: Message do
     field :role, BeamMePrompty.Agent.Dsl.role()
-    field :content, list(TextPart.t() | FilePart.t() | DataPart.t())
+    field :content, list(TextPart.t() | FilePart.t() | DataPart.t() | FunctionResultPart.t())
   end
 
   typedstruct module: Tool do
     field :module, module()
-    field :name, String.t()
+    field :name, atom()
     field :description, String.t()
-    field :parameters, OpenApiSpex.Schema.t()
+    field :parameters, BeamMePrompty.Agent.Dsl.openapi_schema()
   end
 
   typedstruct module: LLMParams do
@@ -71,10 +80,11 @@ defmodule BeamMePrompty.Agent.Dsl do
   @tool_entity %Spark.Dsl.Entity{
     name: :tool,
     target: Tool,
+    args: [:name],
     describe: "Defines a tool that the agent can use.",
     schema: [
       name: [
-        type: :string,
+        type: :atom,
         required: true,
         doc: "Name of the tool."
       ],
@@ -89,7 +99,7 @@ defmodule BeamMePrompty.Agent.Dsl do
         doc: "Description of the tool."
       ],
       parameters: [
-        type: {:struct, OpenApiSpex.Schema},
+        type: :map,
         required: true,
         doc: "Parameters for the tool."
       ]
