@@ -1,7 +1,14 @@
 defmodule BeamMePrompty.LLM.Anthropic do
   @behaviour BeamMePrompty.LLM
 
-  alias BeamMePrompty.Agent.Dsl.{TextPart, DataPart, FilePart}
+  alias BeamMePrompty.Agent.Dsl.{
+    TextPart,
+    DataPart,
+    FilePart,
+    FunctionResultPart,
+    FunctionCallPart
+  }
+
   alias BeamMePrompty.Errors
   alias BeamMePrompty.LLM.Errors.InvalidRequest
   alias BeamMePrompty.LLM.Errors.UnexpectedLLMResponse
@@ -74,7 +81,7 @@ defmodule BeamMePrompty.LLM.Anthropic do
 
   defp tool_choice(tools) do
     tools =
-      Enum.map(tools.function_declarations, fn function_declaration ->
+      Enum.map(tools[:function_declarations], fn function_declaration ->
         %{
           name: function_declaration.name,
           description: function_declaration.description,
@@ -85,11 +92,30 @@ defmodule BeamMePrompty.LLM.Anthropic do
     %{tools: tools}
   end
 
-  defp get_content(%{"content" => content_list}) do
-    case Enum.find(content_list, &(&1["type"] == "text")) do
-      %{"text" => text} -> text
-      _ -> ""
-    end
+  defp get_content(%{"content" => content_list}), do: Enum.map(content_list, &parse_content/1)
+
+  defp parse_content(%{"type" => "tool_use"} = content) do
+    %{
+      function_call: %{
+        id: content["id"],
+        name: content["name"],
+        arguments: content["input"]
+      }
+    }
+  end
+
+  defp parse_content(%{"type" => "tool_result"} = content) do
+    %{
+      function_result: %{
+        tool_use_id: content["tool_use_id"],
+        name: content["name"],
+        content: content["content"]
+      }
+    }
+  end
+
+  defp parse_content(content) do
+    content
   end
 
   defp client(opts) do
@@ -126,6 +152,21 @@ defmodule BeamMePrompty.LLM.Anthropic do
           }
         }
 
+      %FunctionResultPart{id: id, result: result} ->
+        %{
+          type: "tool_result",
+          tool_use_id: id,
+          content: result
+        }
+
+      %FunctionCallPart{function_call: call} ->
+        %{
+          type: "tool_use",
+          id: Map.get(call, :id),
+          name: Map.get(call, :name),
+          input: Map.get(call, :arguments)
+        }
+
       _ ->
         nil
     end
@@ -153,24 +194,23 @@ defmodule BeamMePrompty.LLM.Anthropic do
         s -> s
       end
 
-    roles_to_process = [
-      {:user, "user"},
-      {:assistant, "assistant"}
-    ]
-
+    # Group messages by role, preserving order
     messages_list =
-      Enum.flat_map(roles_to_process, fn {dsl_role_key, api_role_name} ->
-        dsl_parts_for_role = Keyword.get(keyword_messages, dsl_role_key, [])
+      keyword_messages
+      |> Enum.reject(fn {k, _v} -> k == :system end)
+      |> Enum.flat_map(fn {role, parts} ->
+        api_role =
+          case role do
+            :user -> "user"
+            :assistant -> "assistant"
+            _ -> nil
+          end
 
-        formatted_parts_for_role =
-          dsl_parts_for_role
-          |> Enum.map(&format_dsl_part/1)
-          |> Enum.reject(&is_nil(&1))
-
-        if Enum.empty?(formatted_parts_for_role) do
+        if is_nil(api_role) do
           []
         else
-          [%{role: api_role_name, content: formatted_parts_for_role}]
+          # Handle message parts
+          format_role_messages(api_role, parts)
         end
       end)
 
@@ -180,6 +220,28 @@ defmodule BeamMePrompty.LLM.Anthropic do
       Map.put(output, :system, system_string)
     else
       output
+    end
+  end
+
+  # Helper to format messages for a specific role
+  defp format_role_messages(role, parts) when is_list(parts) do
+    # Flatten nested lists while preserving order
+    formatted_parts =
+      Enum.flat_map(parts, fn
+        parts_list when is_list(parts_list) ->
+          Enum.map(parts_list, &format_dsl_part/1) |> Enum.reject(&is_nil/1)
+
+        part ->
+          case format_dsl_part(part) do
+            nil -> []
+            formatted -> [formatted]
+          end
+      end)
+
+    if Enum.empty?(formatted_parts) do
+      []
+    else
+      [%{role: role, content: formatted_parts}]
     end
   end
 end

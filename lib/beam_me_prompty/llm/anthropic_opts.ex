@@ -82,7 +82,7 @@ defmodule BeamMePrompty.LLM.AnthropicOpts do
         top_k: config.top_k,
         key: api_key(config.api_key),
         thinking_budget: config.thinking_budget,
-        tools: tools,
+        tools: parse_dsl_tools(tools),
         model: model
       ]
       |> Keyword.reject(fn {_, v} -> is_nil(v) end)
@@ -103,5 +103,22 @@ defmodule BeamMePrompty.LLM.AnthropicOpts do
       key when is_binary(key) -> key
       _ -> nil
     end
+  end
+
+  defp parse_dsl_tools(nil), do: nil
+
+  defp parse_dsl_tools([]), do: nil
+
+  defp parse_dsl_tools(tools) do
+    [
+      function_declarations:
+        Enum.map(tools, fn tool ->
+          %{
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parameters
+          }
+        end)
+    ]
   end
 end

@@ -75,8 +75,17 @@ defmodule BeamMePrompty.Agent.Stage do
 
   # --- Tool Calling Helpers ---
 
-  defp is_function_call_response(%{function_call: %{name: name}}) when is_binary(name), do: true
-  defp is_function_call_response(_), do: false
+  defp is_function_call_response(%{function_call: %{name: name}} = response) when is_binary(name),
+    do: {:tool, response}
+
+  defp is_function_call_response(parts) when is_list(parts) do
+    case Enum.find(parts, &is_map_key(&1, :function_call)) do
+      nil -> {:ok, parts}
+      tool -> {:tool, tool}
+    end
+  end
+
+  defp is_function_call_response(response), do: {:ok, response}
 
   # --- LLM Interaction Logic ---
 
@@ -148,67 +157,77 @@ defmodule BeamMePrompty.Agent.Stage do
         assistant_response_message = format_response(llm_response)
         history_after_llm_response = messages_to_send_to_llm ++ [assistant_response_message]
 
-        if is_function_call_response(llm_response) do
-          function_call = llm_response.function_call
-          tool_name_str = function_call.name
-          tool_name_atom = String.to_existing_atom(tool_name_str)
-          tool_args = function_call.arguments
-          tool_call_id = Map.get(function_call, :id)
+        case is_function_call_response(llm_response) do
+          {:ok, llm_response} ->
+            {:ok, llm_response, history_after_llm_response}
 
-          tool_def = Enum.find(available_tools, &(&1.name == tool_name_atom))
+          {:tool, llm_response} ->
+            function_call = llm_response.function_call
+            tool_name_str = function_call.name
+            tool_name_atom = String.to_existing_atom(tool_name_str)
+            tool_args = function_call.arguments
+            tool_call_id = Map.get(function_call, :id)
 
-          if tool_def do
-            tool_run_result =
-              try do
-                apply(tool_def.module, :run, [tool_args])
-              rescue
-                e -> {:error, {e, __STACKTRACE__}}
-              end
+            tool_def = Enum.find(available_tools, &(&1.name == tool_name_atom))
 
-            next_request_messages =
-              case tool_run_result do
-                {:ok, result_content} ->
-                  [format_tool_result_as_message(tool_call_id, tool_name_str, result_content)]
+            if tool_def do
+              tool_run_result =
+                try do
+                  apply(tool_def.module, :run, [tool_args])
+                rescue
+                  e -> {:error, {e, __STACKTRACE__}}
+                end
 
-                {:error, error_reason} ->
-                  [format_tool_error_as_message(tool_call_id, tool_name_str, error_reason)]
-              end
+              next_request_messages =
+                case tool_run_result do
+                  {:ok, result_content} ->
+                    [format_tool_result_as_message(tool_call_id, tool_name_str, result_content)]
 
-            process_llm_interactions(
-              llm_client,
-              model,
-              available_tools,
-              llm_params,
-              history_after_llm_response,
-              next_request_messages,
-              remaining_iterations - 1
-            )
-          else
-            tool_not_found_msg = [
-              format_tool_error_as_message(
-                tool_call_id,
-                tool_name_str,
-                "Tool not defined: #{tool_name_str}"
+                  {:error, error_reason} ->
+                    [format_tool_error_as_message(tool_call_id, tool_name_str, error_reason)]
+                end
+
+              process_llm_interactions(
+                llm_client,
+                model,
+                available_tools,
+                llm_params,
+                history_after_llm_response,
+                next_request_messages,
+                remaining_iterations - 1
               )
-            ]
+            else
+              tool_not_found_msg = [
+                format_tool_error_as_message(
+                  tool_call_id,
+                  tool_name_str,
+                  "Tool not defined: #{tool_name_str}"
+                )
+              ]
 
-            process_llm_interactions(
-              llm_client,
-              model,
-              available_tools,
-              llm_params,
-              history_after_llm_response,
-              tool_not_found_msg,
-              remaining_iterations - 1
-            )
-          end
-        else
-          {:ok, llm_response, history_after_llm_response}
+              process_llm_interactions(
+                llm_client,
+                model,
+                available_tools,
+                llm_params,
+                history_after_llm_response,
+                tool_not_found_msg,
+                remaining_iterations - 1
+              )
+            end
         end
 
       {:error, reason} ->
         {:error, reason, accumulated_messages}
     end
+  end
+
+  defp format_response(response) when is_list(response) do
+    {:assistant,
+     Enum.map(response, fn part ->
+       {_, response} = format_response(part)
+       response
+     end)}
   end
 
   defp format_response(response) when is_binary(response) do
