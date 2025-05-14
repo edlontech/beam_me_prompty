@@ -26,8 +26,6 @@ defmodule BeamMePrompty.Agent.Stage do
   end
 
   def idle(:cast, {:execute, node_name, node_def, node_ctx, caller_pid}, data) do
-    dbg(:here)
-
     case do_execute_stage(node_def, node_ctx) do
       {:ok, result} ->
         send(caller_pid, {:stage_response, node_name, {:ok, result}})

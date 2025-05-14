@@ -93,7 +93,7 @@ defmodule BeamMePrompty.Agent.Executor do
         ref = Process.monitor(pid)
 
         check_completion = fn ->
-          case get_results(pid) do
+          case get_results(pid) |> dbg() do
             {:ok, :completed, results} ->
               Process.exit(pid, :normal)
               {:ok, results}

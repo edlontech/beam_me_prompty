@@ -102,8 +102,8 @@ defmodule BeamMePrompty.Agent.Internals do
     end
   end
 
-  def waiting_for_plan(:call, {:get_state, from}, data) do
-    {:keep_state, data, [{:reply, from, {:ok, data.current_state}}]}
+  def waiting_for_plan({:call, from}, :get_results, data) do
+    {:keep_state, data, [{:reply, from, {:ok, :planning_execution}}]}
   end
 
   def execute_nodes(:internal, :execute, data) do
@@ -177,8 +177,8 @@ defmodule BeamMePrompty.Agent.Internals do
     handle_error({:error, error_info_tuple}, data_for_error_handling)
   end
 
-  def awaiting_stage_results({:call, {from, _}}, :get_state, data) do
-    {:keep_state, data, [{:reply, from, {:ok, data.current_state}}]}
+  def awaiting_stage_results({:call, from}, :get_results, data) do
+    {:keep_state, data, [{:reply, from, {:ok, :waiting_for_stage_results}}]}
   end
 
   def awaiting_stage_results(event_type, event_content, _data) do
@@ -187,6 +187,38 @@ defmodule BeamMePrompty.Agent.Internals do
     )
 
     :keep_state_and_data
+  end
+
+  def completed({:call, from}, :get_results, data) do
+    {:keep_state, data, [{:reply, from, {:ok, :completed, data.results}}]}
+  end
+
+  def completed({:call, from}, {:get_node_result, node_name}, data) do
+    result = Map.get(data.results, node_name)
+
+    case result do
+      nil ->
+        {:keep_state, data, [{:reply, from, {:error, :node_not_found}}]}
+
+      _ ->
+        {:keep_state, data, [{:reply, from, {:ok, :completed, result}}]}
+    end
+  end
+
+  def completed(:info, :cleanup, data) do
+    if Process.alive?(data.stages_supervisor_pid) do
+      DynamicSupervisor.stop(data.stages_supervisor_pid)
+    end
+
+    {:keep_state, data}
+  end
+
+  def completed(event_type, event_content, data) do
+    Logger.warning(
+      "Unexpected event in completed state: #{inspect(event_type)} - #{inspect(event_content)}"
+    )
+
+    {:keep_state, data}
   end
 
   defp handle_error({:error, error}, data) do
