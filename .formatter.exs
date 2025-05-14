@@ -1,4 +1,5 @@
 [
+  import_deps: [:typedstruct],
   inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}"],
   line_length: 98,
   locals_without_parens: [
@@ -10,8 +11,18 @@
     with_input: 1,
     message: 2,
     expect_output: 1,
-    call: 1,
-    call: 2
+    temperature: 1,
+    top_p: 1,
+    frequency_penalty: 1,
+    presence_penalty: 1,
+    structured_response: 1,
+    depends_on: 1,
+    tool: 1,
+    module: 1,
+    name: 1,
+    description: 1,
+    parameters: 1,
+    api_key: 1
   ],
   export: [
     locals_without_parens: [
@@ -23,8 +34,17 @@
       with_input: 1,
       message: 2,
       expect_output: 1,
-      call: 1,
-      call: 2
+      temperature: 1,
+      top_p: 1,
+      frequency_penalty: 1,
+      presence_penalty: 1,
+      structured_response: 1,
+      tool: 1,
+      module: 1,
+      name: 1,
+      description: 1,
+      parameters: 1,
+      api_key: 1
     ]
   ]
 ]

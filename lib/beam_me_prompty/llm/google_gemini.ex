@@ -11,9 +11,17 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
   alias BeamMePrompty.LLM.Errors.UnexpectedLLMResponse
   alias BeamMePrompty.LLM.GoogleGeminiOpts
 
+  alias BeamMePrompty.Agent.Dsl.{
+    TextPart,
+    DataPart,
+    FilePart,
+    FunctionResultPart,
+    FunctionCallPart
+  }
+
   @impl true
-  def completion(messages, opts) do
-    with {:ok, opts} <- GoogleGeminiOpts.validate(opts),
+  def completion(model, messages, tools, opts) do
+    with {:ok, opts} <- GoogleGeminiOpts.validate(model, tools, opts),
          {:ok, response} <- call_api(messages, opts) do
       {:ok, response}
     else
@@ -44,7 +52,14 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
         generation_config
       end
 
-    payload = Map.merge(prepare_messages(messages), %{generation_config: generation_config})
+    base_payload = Map.merge(prepare_messages(messages), %{generation_config: generation_config})
+
+    payload =
+      if tools_config = opts[:tools] do
+        Map.put(base_payload, :tools, [Map.new(tools_config)])
+      else
+        base_payload
+      end
 
     client(opts)
     |> Req.post(url: "/models/{model}:generateContent", json: payload)
@@ -52,7 +67,7 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
   end
 
   defp parse_response({:ok, %Req.Response{status: 200, body: body}}) do
-    {:ok, get_candidate(body)}
+    get_candidate(body)
   end
 
   defp parse_response({:ok, %Req.Response{status: status, body: body}})
@@ -64,10 +79,56 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
     {:error, UnexpectedLLMResponse.exception(module: __MODULE__, status: 500, cause: body)}
   end
 
+  defp get_candidate_content(%{"text" => text_content}) when is_binary(text_content) do
+    {:ok, text_content}
+  end
+
+  defp get_candidate_content(%{
+         "functionCall" => %{
+           "args" => args,
+           "name" => name
+         }
+       }) do
+    {:ok,
+     %{
+       function_call: %{
+         arguments: args,
+         name: name
+       }
+     }}
+  end
+
+  defp get_candidate_content(unknown_part) do
+    {:error,
+     UnexpectedLLMResponse.exception(
+       module: __MODULE__,
+       cause: "Unknown structure for content part in LLM response: #{inspect(unknown_part)}"
+     )}
+  end
+
   defp get_candidate(%{
-         "candidates" => [%{"content" => %{"parts" => [%{"text" => text} | _]}} | _]
+         "candidates" => [
+           %{"content" => %{"parts" => [first_part | _]}} | _
+         ]
        }),
-       do: text
+       do: get_candidate_content(first_part)
+
+  defp get_candidate(%{"candidates" => []} = body) do
+    {:error,
+     UnexpectedLLMResponse.exception(
+       module: __MODULE__,
+       cause: "LLM response contains no candidates. Body: #{inspect(body)}"
+     )}
+  end
+
+  defp get_candidate(body) do
+    {:error,
+     UnexpectedLLMResponse.exception(
+       module: __MODULE__,
+       cause:
+         "Malformed or missing 'candidates' list/structure in LLM response. Body: #{inspect(body)}"
+     )}
+  end
 
   defp client(opts) do
     Req.new(
@@ -79,35 +140,83 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
     )
   end
 
-  defp prepare_messages(prompt) do
-    case List.wrap(prompt) do
-      [message] ->
-        [text_content(message)]
+  defp format_dsl_part_to_gemini_api_part(part) do
+    case part do
+      %TextPart{text: text_content} when is_binary(text_content) ->
+        %{text: text_content}
 
-      [maybe_system | messages] ->
-        [text_content(maybe_system, :system) | Enum.map(messages, &text_content/1)]
-    end
-    |> Enum.split_with(fn %{role: role} -> role == [:system, "system"] end)
-    |> then(fn {system_messages, other_messages} ->
-      merged_system_message =
+      %DataPart{data: data_content} ->
+        Jason.encode(data_content)
+        |> case do
+          {:ok, json_string} -> %{text: json_string}
+          {:error, _} -> nil
+        end
+
+      %FilePart{file: %{bytes: bytes, mime_type: mime_type}}
+      when not is_nil(bytes) and not is_nil(mime_type) ->
+        %{inlineData: %{mimeType: mime_type, data: Base.encode64(bytes)}}
+
+      %FunctionResultPart{id: id, name: name, result: result} ->
         %{
-          role: :system,
-          parts: [
-            %{
-              text: Enum.map_join(system_messages, "\n", fn %{parts: [%{text: text}]} -> text end)
-            }
-          ]
+          function_response: %{
+            id: id,
+            name: name,
+            response: %{result: result}
+          }
         }
 
-      %{
-        system_instruction: merged_system_message,
-        contents: other_messages
-      }
-    end)
+      %FunctionCallPart{function_call: call} ->
+        %{
+          function_call: %{
+            id: Map.get(call, :id),
+            name: Map.get(call, :name),
+            args: Map.get(call, :arguments)
+          }
+        }
+
+      _ ->
+        nil
+    end
   end
 
-  defp text_content(text, default_role \\ :user)
-  defp text_content(%{role: role, content: text}, _), do: %{role: role, parts: [%{text: text}]}
-  defp text_content({role, text}, _), do: %{role: role, parts: [%{text: text}]}
-  defp text_content(text, role), do: %{role: role, parts: [%{text: text}]}
+  defp prepare_messages(keyword_messages) do
+    gemini_system_api_parts =
+      Keyword.get(keyword_messages, :system, [])
+      |> Enum.map(&format_dsl_part_to_gemini_api_part/1)
+      |> Enum.reject(&is_nil(&1))
+
+    system_instruction =
+      case gemini_system_api_parts do
+        [] -> nil
+        parts_list -> %{parts: parts_list}
+      end
+
+    gemini_api_contents =
+      keyword_messages
+      |> Enum.filter(fn {role, _} -> role in [:user, :assistant] end)
+      |> Enum.map(fn
+        {:user, parts} ->
+          api_parts =
+            parts
+            |> Enum.map(&format_dsl_part_to_gemini_api_part/1)
+            |> Enum.reject(&is_nil(&1))
+
+          if Enum.empty?(api_parts), do: nil, else: %{role: "user", parts: api_parts}
+
+        {:assistant, parts} ->
+          api_parts =
+            parts
+            |> Enum.map(&format_dsl_part_to_gemini_api_part/1)
+            |> Enum.reject(&is_nil(&1))
+
+          if Enum.empty?(api_parts), do: nil, else: %{role: "model", parts: api_parts}
+      end)
+      |> Enum.reject(&is_nil(&1))
+
+    if system_instruction do
+      %{system_instruction: system_instruction, contents: gemini_api_contents}
+    else
+      %{contents: gemini_api_contents}
+    end
+  end
 end

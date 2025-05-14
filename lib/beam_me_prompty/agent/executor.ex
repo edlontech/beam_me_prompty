@@ -1,6 +1,6 @@
-defmodule BeamMePrompty.AgentExecution.Executor do
+defmodule BeamMePrompty.Agent.Executor do
   alias BeamMePrompty.DAG
-  alias BeamMePrompty.AgentExecution.ExecutorOptions
+  alias BeamMePrompty.Agent.ExecutorOptions
   alias BeamMePrompty.Errors
 
   @type state :: map()
@@ -20,7 +20,7 @@ defmodule BeamMePrompty.AgentExecution.Executor do
 
   defmacro __using__(_opts) do
     quote location: :keep do
-      @behaviour BeamMePrompty.Agents.Executor
+      @behaviour BeamMePrompty.Agent.Executor
 
       alias BeamMePrompty.Errors.External, as: ExternalError
 
@@ -88,26 +88,20 @@ defmodule BeamMePrompty.AgentExecution.Executor do
       {:ok, results} = BeamMePrompty.Agents.Executor.execute(MyAgent, %{input: "data"})
   """
   def execute(module, input, state, opts, timeout) do
-    # Start the agent process
     case start_link(module, input, state, opts) do
       {:ok, pid} ->
-        # Monitor the process to detect crashes
         ref = Process.monitor(pid)
 
-        # Create a polling function to check for completion
         check_completion = fn ->
           case get_results(pid) do
             {:ok, :completed, results} ->
-              # Agent is complete, get results and terminate it
               Process.exit(pid, :normal)
               {:ok, results}
 
             {:ok, _} ->
-              # Agent still running, continue polling
               :continue
 
             error ->
-              # Something went wrong
               error
           end
         end
@@ -130,8 +124,7 @@ defmodule BeamMePrompty.AgentExecution.Executor do
   end
 
   def start_link(module, input, state, opts) do
-    agent = module.agent()
-    dag = DAG.build(agent.stages)
+    dag = DAG.build(module.stages())
 
     with :ok <- DAG.validate(dag),
          {:ok, opts} <- ExecutorOptions.validate(opts) do
@@ -141,14 +134,13 @@ defmodule BeamMePrompty.AgentExecution.Executor do
   end
 
   defp args(init, nil) do
-    [BeamMePrompty.Agents.Internals, init, []]
+    [BeamMePrompty.Agent.Internals, init, []]
   end
 
   defp args(init, name) do
-    [name, BeamMePrompty.Agents.Internals, init, []]
+    [name, BeamMePrompty.Agent.Internals, init, []]
   end
 
-  # Helper function to poll for completion with timeout
   defp poll_for_completion(check_fn, timeout, interval \\ 100) do
     end_time = System.monotonic_time(:millisecond) + timeout
 
@@ -161,16 +153,13 @@ defmodule BeamMePrompty.AgentExecution.Executor do
         current_time = System.monotonic_time(:millisecond)
 
         if current_time < end_time do
-          # Sleep for a short interval before trying again
           Process.sleep(interval)
           poll_loop(check_fn, end_time, interval)
         else
-          # Timeout reached
           {:error, :timeout}
         end
 
       result ->
-        # Got a result or error
         result
     end
   end
