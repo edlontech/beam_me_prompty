@@ -88,26 +88,20 @@ defmodule BeamMePrompty.Agent.Executor do
       {:ok, results} = BeamMePrompty.Agents.Executor.execute(MyAgent, %{input: "data"})
   """
   def execute(module, input, state, opts, timeout) do
-    # Start the agent process
     case start_link(module, input, state, opts) do
       {:ok, pid} ->
-        # Monitor the process to detect crashes
         ref = Process.monitor(pid)
 
-        # Create a polling function to check for completion
         check_completion = fn ->
           case get_results(pid) do
             {:ok, :completed, results} ->
-              # Agent is complete, get results and terminate it
               Process.exit(pid, :normal)
               {:ok, results}
 
             {:ok, _} ->
-              # Agent still running, continue polling
               :continue
 
             error ->
-              # Something went wrong
               error
           end
         end
@@ -147,7 +141,6 @@ defmodule BeamMePrompty.Agent.Executor do
     [name, BeamMePrompty.Agent.Internals, init, []]
   end
 
-  # Helper function to poll for completion with timeout
   defp poll_for_completion(check_fn, timeout, interval \\ 100) do
     end_time = System.monotonic_time(:millisecond) + timeout
 
@@ -160,16 +153,13 @@ defmodule BeamMePrompty.Agent.Executor do
         current_time = System.monotonic_time(:millisecond)
 
         if current_time < end_time do
-          # Sleep for a short interval before trying again
           Process.sleep(interval)
           poll_loop(check_fn, end_time, interval)
         else
-          # Timeout reached
           {:error, :timeout}
         end
 
       result ->
-        # Got a result or error
         result
     end
   end

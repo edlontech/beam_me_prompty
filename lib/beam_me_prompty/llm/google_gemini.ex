@@ -76,8 +76,19 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
     {:ok, text_content}
   end
 
-  defp get_candidate_content(part_map) when is_map(part_map) do
-    {:ok, part_map}
+  defp get_candidate_content(%{
+         "functionCall" => %{
+           "args" => args,
+           "name" => name
+         }
+       }) do
+    {:ok,
+     %{
+       functionCall: %{
+         arguments: args,
+         name: name
+       }
+     }}
   end
 
   defp get_candidate_content(unknown_part) do
@@ -92,9 +103,8 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
          "candidates" => [
            %{"content" => %{"parts" => [first_part | _]}} | _
          ]
-       }) do
-    get_candidate_content(first_part)
-  end
+       }),
+       do: get_candidate_content(first_part)
 
   defp get_candidate(%{"candidates" => []} = body) do
     {:error,

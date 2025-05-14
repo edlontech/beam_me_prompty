@@ -4,48 +4,67 @@ defmodule BeamMePrompty.Agent.Internals do
   defstruct [
     :dag,
     :module,
-    :retry,
     :global_input,
-    :results,
     :nodes_to_execute,
     :initial_state,
     :current_state,
     :started_at,
     :last_transition_at,
     :opts,
-    :retry_count,
-    :retry_config,
-    :retry_node,
-    :retry_started_at
+    :stages_supervisor_pid,
+    :stage_workers,
+    :results,
+    :pending_nodes,
+    :current_batch_details,
+    :temp_batch_results
   ]
 
+  require Logger
+
+  alias BeamMePrompty.Agent.StagesSupervisor
   alias BeamMePrompty.DAG
   alias BeamMePrompty.Errors
-  alias BeamMePrompty.LLM.MessageParser
 
   @impl true
   def init({dag, input, state, opts, module}) do
-    data = %__MODULE__{
-      dag: dag,
-      opts: opts,
-      module: module,
-      global_input: input,
-      initial_state: state,
-      current_state: state,
-      results: %{},
-      retry_count: 0,
-      retry_config: %{
-        max_retries: Keyword.get(opts, :max_retries),
-        backoff_initial: Keyword.get(opts, :backoff_initial),
-        backoff_factor: Keyword.get(opts, :backoff_factor),
-        max_backoff: Keyword.get(opts, :max_backoff)
-      },
-      started_at: System.monotonic_time(:millisecond)
-    }
+    case StagesSupervisor.start_link(:ok) do
+      {:ok, sup_pid} ->
+        stage_workers =
+          Enum.into(dag.nodes, %{}, fn {node_name, _node_definition} ->
+            case StagesSupervisor.start_stage_worker(sup_pid, node_name) do
+              {:ok, stage_pid} ->
+                {node_name, stage_pid}
 
-    actions = [{:next_event, :internal, :plan}]
+              {:ok, pid, _extra_info} ->
+                {node_name, pid}
 
-    {:ok, :waiting_for_plan, data, actions}
+              {:error, reason} ->
+                raise "Failed to start stage worker for #{node_name}: #{inspect(reason)}"
+            end
+          end)
+
+        data = %__MODULE__{
+          dag: dag,
+          opts: opts,
+          module: module,
+          global_input: input,
+          initial_state: state,
+          current_state: state,
+          started_at: System.monotonic_time(:millisecond),
+          stages_supervisor_pid: sup_pid,
+          stage_workers: stage_workers,
+          results: %{},
+          pending_nodes: [],
+          current_batch_details: %{},
+          temp_batch_results: %{}
+        }
+
+        actions = [{:next_event, :internal, :plan}]
+        {:ok, :waiting_for_plan, data, actions}
+
+      {:error, reason} ->
+        {:stop, {:failed_to_start_stages_supervisor, reason}}
+    end
   end
 
   def waiting_for_plan(:internal, :plan, data) do
@@ -88,139 +107,86 @@ defmodule BeamMePrompty.Agent.Internals do
   end
 
   def execute_nodes(:internal, :execute, data) do
-    results =
-      Enum.reduce_while(data.nodes_to_execute, {:ok, data.results || %{}}, fn {node_name, node,
-                                                                               context},
-                                                                              {:ok, acc_results} ->
-        data.module.handle_stage_start(node, data.current_state)
+    if Enum.empty?(data.nodes_to_execute) do
+      # This case should ideally not be hit if waiting_for_plan ensures nodes_to_execute is populated
+      # before transitioning here with an :execute event.
+      # However, as a safeguard, transition back to planning.
+      {:next_state, :waiting_for_plan, data, [{:next_event, :internal, :plan}]}
+    else
+      current_batch_details =
+        Enum.into(data.nodes_to_execute, %{}, fn {name, nd_def, nd_ctx} ->
+          {name, {nd_def, nd_ctx}}
+        end)
 
-        case execute_stage(node, context) do
-          {:ok, result} ->
-            data.module.handle_stage_finish(node, result, data.current_state)
-            {:cont, {:ok, Map.put(acc_results, node_name, result)}}
-
-          {:error, reason} ->
-            {:halt, {:error, {node_name, node, context, reason}}}
-        end
+      Enum.each(data.nodes_to_execute, fn {node_name, node_def, node_ctx} ->
+        stage_pid = Map.get(data.stage_workers, node_name)
+        GenStateMachine.cast(stage_pid, {:execute, node_name, node_def, node_ctx, self()})
       end)
 
-    case results do
-      {:ok, updated_results} ->
-        updated_data = %__MODULE__{
-          data
-          | results: updated_results,
-            nodes_to_execute: nil
-        }
+      pending_node_names = Enum.map(data.nodes_to_execute, fn {name, _, _} -> name end)
 
-        {:next_state, :waiting_for_plan, updated_data, [{:next_event, :internal, :plan}]}
+      new_data = %{
+        data
+        | nodes_to_execute: [],
+          pending_nodes: pending_node_names,
+          current_batch_details: current_batch_details,
+          temp_batch_results: %{}
+      }
 
-      err ->
-        handle_error(err, data)
+      {:next_state, :awaiting_stage_results, new_data}
     end
   end
 
-  def retrying(:internal, :retry, %{retry: retry_type} = data) do
-    data = %__MODULE__{data | retry: nil}
+  def awaiting_stage_results(:info, {:stage_response, node_name, {:ok, stage_result}}, data) do
+    updated_temp_results = Map.put(data.temp_batch_results, node_name, stage_result)
+    updated_pending_nodes = List.delete(data.pending_nodes, node_name)
 
-    case retry_type do
-      {:only_stage, _reason} ->
-        if data.retry_node do
-          {node_name, node, context} = data.retry_node
+    new_data = %{
+      data
+      | temp_batch_results: updated_temp_results,
+        pending_nodes: updated_pending_nodes
+    }
 
-          data.module.handle_stage_start(node, data.current_state)
+    if Enum.empty?(updated_pending_nodes) do
+      final_results = Map.merge(data.results, new_data.temp_batch_results)
 
-          case execute_stage(node, context) do
-            {:ok, result} ->
-              data.module.handle_stage_finish(node, result, data.current_state)
-              updated_results = Map.put(data.results, node_name, result)
+      next_data = %{
+        new_data
+        | results: final_results,
+          temp_batch_results: %{},
+          current_batch_details: %{}
+      }
 
-              updated_data = %__MODULE__{
-                data
-                | results: updated_results,
-                  nodes_to_execute: nil,
-                  retry_count: 0,
-                  retry_node: nil
-              }
-
-              {:next_state, :waiting_for_plan, updated_data, [{:next_event, :internal, :plan}]}
-
-            {:error, reason} ->
-              handle_error(
-                {:error, {node_name, node, context, reason}},
-                %__MODULE__{data | retry_node: {node_name, node, context}}
-              )
-          end
-        else
-          {:error,
-           Errors.ExecutionError.exception(
-             step: :retrying,
-             cause: "Missing node information for retry."
-           )}
-          |> handle_error(%__MODULE__{data | retry_count: 0})
-        end
-
-      {:from_start, _reason} ->
-        reset_data = %__MODULE__{
-          data
-          | results: %{},
-            nodes_to_execute: nil,
-            current_state: data.initial_state,
-            retry_count: 0,
-            retry_node: nil
-        }
-
-        {:next_state, :waiting_for_plan, reset_data, [{:next_event, :internal, :plan}]}
+      {:next_state, :waiting_for_plan, next_data, [{:next_event, :internal, :plan}]}
+    else
+      {:keep_state, new_data}
     end
   end
 
-  def retrying(:info, :retry_timeout, data) do
-    {:next_state, :retrying, data, [{:next_event, :internal, :retry}]}
+  def awaiting_stage_results(:info, {:stage_response, node_name, {:error, reason_of_error}}, data) do
+    {node_def, node_ctx} = Map.get(data.current_batch_details, node_name)
+    error_info_tuple = {node_name, node_def, node_ctx, reason_of_error}
+
+    data_for_error_handling = %{
+      data
+      | temp_batch_results: %{},
+        pending_nodes: [],
+        current_batch_details: %{}
+    }
+
+    handle_error({:error, error_info_tuple}, data_for_error_handling)
   end
 
-  def completed({:call, from}, :get_results, data) do
-    GenStateMachine.reply(from, {:ok, :completed, data.results})
+  def awaiting_stage_results({:call, {from, _}}, :get_state, data) do
+    {:keep_state, data, [{:reply, from, {:ok, data.current_state}}]}
+  end
+
+  def awaiting_stage_results(event_type, event_content, _data) do
+    Logger.warning(
+      "Unexpected event in awaiting_stage_results: #{inspect(event_type)} - #{inspect(event_content)}"
+    )
+
     :keep_state_and_data
-  end
-
-  defp execute_stage(stage, exec_context) do
-    global_input = exec_context[:global_input]
-    dependency_results = exec_context[:dependency_results] || %{}
-    inputs = Map.merge(global_input, dependency_results)
-
-    with {:ok, llm_result} <- maybe_call_llm(stage.llm, inputs) do
-      {:ok, llm_result}
-    else
-      {:error, reason} -> {:error, Errors.to_class(reason)}
-      result when is_map(result) -> {:ok, result}
-    end
-  end
-
-  defp maybe_call_llm([config | _], input) do
-    if config.model && config.llm_client do
-      messages = MessageParser.parse(config.messages, input) || []
-      [params | _] = config.params
-
-      case BeamMePrompty.LLM.completion(
-             config.llm_client,
-             config.model,
-             messages,
-             config.tools,
-             params
-           ) do
-        {:ok, result} ->
-          {:ok, result}
-
-        {:error, err} ->
-          {:error, err}
-      end
-    else
-      {:ok, %{}}
-    end
-  end
-
-  defp handle_error({:error, {node_name, node, context, error}}, data) do
-    data = %__MODULE__{data | retry_node: {node_name, node, context}}
-    handle_error({:error, error}, data)
   end
 
   defp handle_error({:error, error}, data) do
@@ -230,66 +196,7 @@ defmodule BeamMePrompty.Agent.Internals do
     |> handle_error_callback(data)
   end
 
-  defp handle_error_callback({:retry, reason, state}, data) do
-    if data.retry_count >= data.retry_config.max_retries do
-      {:stop,
-       {:error,
-        Errors.ExecutionError.exception(
-          step: :retry,
-          cause: "Maximum retry attempts (#{data.retry_config.max_retries}) exceeded."
-        )}, data}
-    else
-      retry_count = data.retry_count + 1
-      backoff_ms = calculate_backoff(retry_count, data.retry_config)
-
-      updated_data = %__MODULE__{
-        data
-        | current_state: state.current_state,
-          retry: {:only_stage, reason},
-          retry_count: retry_count,
-          retry_started_at: System.monotonic_time(:millisecond)
-      }
-
-      {:next_state, :retrying, updated_data, [{:state_timeout, backoff_ms, :retry_timeout}]}
-    end
-  end
-
-  defp handle_error_callback({:restart, reason}, data) do
-    if data.retry_count >= data.retry_config.max_retries do
-      {:stop,
-       {:error,
-        Errors.ExecutionError.exception(
-          step: :retry,
-          cause: "Maximum retry attempts (#{data.retry_config.max_retries}) exceeded."
-        )}, data}
-    else
-      retry_count = data.retry_count + 1
-      backoff_ms = calculate_backoff(retry_count, data.retry_config)
-
-      updated_data = %__MODULE__{
-        data
-        | current_state: data.initial_state,
-          retry: {:from_start, reason},
-          retry_count: retry_count,
-          retry_started_at: System.monotonic_time(:millisecond)
-      }
-
-      {:next_state, :retrying, updated_data, [{:state_timeout, backoff_ms, :retry_timeout}]}
-    end
-  end
-
   defp handle_error_callback({:stop, reason}, data) do
     {:stop, reason, data}
-  end
-
-  defp calculate_backoff(retry_count, config) do
-    backoff = config.backoff_initial * :math.pow(config.backoff_factor, retry_count - 1)
-
-    # Add some jitter (±10%) to prevent thundering herd problem
-    # -10% to +10%
-    jitter = :rand.uniform(20) - 10
-    backoff_with_jitter = backoff * (1 + jitter / 100)
-
-    trunc(min(backoff_with_jitter, config.max_backoff))
   end
 end

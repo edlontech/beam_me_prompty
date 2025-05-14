@@ -19,7 +19,7 @@ defmodule BeamMePrompty.LLM do
 
   @typedoc "Request from the LLM to execute a function."
   @type function_call_request :: %{
-          function_call: %{
+          functionCall: %{
             optional(:id) => String.t(),
             optional(:name) => String.t(),
             optional(:arguments) => map()
