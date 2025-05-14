@@ -9,7 +9,7 @@ defmodule BeamMePrompty.LLM do
   @type roles :: :system | :user | :assistant
 
   @typedoc "Represents a message in a conversation history."
-  @type message :: binary() | {roles(), binary()}
+  @type message :: binary() | {roles(), binary() | map()}
 
   @typedoc "Represents the response from an LLM provider."
   @type response :: binary() | function_call_request() | map()
@@ -47,7 +47,6 @@ defmodule BeamMePrompty.LLM do
   @doc """
   A convenience function to call the `completion/4` callback on a specific client module.
   """
-  def completion(client_module, model, messages, tools \\ [], opts \\ []) do
-    client_module.completion(model, messages, tools, opts)
-  end
+  def completion(client_module, model, messages, tools \\ [], opts \\ []),
+    do: client_module.completion(model, messages, tools, opts)
 end

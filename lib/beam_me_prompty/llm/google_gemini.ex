@@ -10,7 +10,14 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
   alias BeamMePrompty.LLM.Errors.InvalidRequest
   alias BeamMePrompty.LLM.Errors.UnexpectedLLMResponse
   alias BeamMePrompty.LLM.GoogleGeminiOpts
-  alias BeamMePrompty.Agent.Dsl.{TextPart, DataPart, FilePart}
+
+  alias BeamMePrompty.Agent.Dsl.{
+    TextPart,
+    DataPart,
+    FilePart,
+    FunctionResultPart,
+    FunctionCallPart
+  }
 
   @impl true
   def completion(model, messages, tools, opts) do
@@ -84,7 +91,7 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
        }) do
     {:ok,
      %{
-       functionCall: %{
+       function_call: %{
          arguments: args,
          name: name
        }
@@ -149,6 +156,24 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
       when not is_nil(bytes) and not is_nil(mime_type) ->
         %{inlineData: %{mimeType: mime_type, data: Base.encode64(bytes)}}
 
+      %FunctionResultPart{id: id, name: name, result: result} ->
+        %{
+          function_response: %{
+            id: id,
+            name: name,
+            response: %{result: result}
+          }
+        }
+
+      %FunctionCallPart{function_call: call} ->
+        %{
+          function_call: %{
+            id: Map.get(call, :id),
+            name: Map.get(call, :name),
+            args: Map.get(call, :arguments)
+          }
+        }
+
       _ ->
         nil
     end
@@ -166,26 +191,27 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
         parts_list -> %{parts: parts_list}
       end
 
-    roles_to_process = [
-      {:user, "user"},
-      {:assistant, "model"}
-    ]
-
     gemini_api_contents =
-      Enum.flat_map(roles_to_process, fn {dsl_role_key, api_role_name} ->
-        dsl_parts_for_role = Keyword.get(keyword_messages, dsl_role_key, [])
+      keyword_messages
+      |> Enum.filter(fn {role, _} -> role in [:user, :assistant] end)
+      |> Enum.map(fn
+        {:user, parts} ->
+          api_parts =
+            parts
+            |> Enum.map(&format_dsl_part_to_gemini_api_part/1)
+            |> Enum.reject(&is_nil(&1))
 
-        api_parts_for_role =
-          dsl_parts_for_role
-          |> Enum.map(&format_dsl_part_to_gemini_api_part/1)
-          |> Enum.reject(&is_nil(&1))
+          if Enum.empty?(api_parts), do: nil, else: %{role: "user", parts: api_parts}
 
-        if Enum.empty?(api_parts_for_role) do
-          []
-        else
-          [%{role: api_role_name, parts: api_parts_for_role}]
-        end
+        {:assistant, parts} ->
+          api_parts =
+            parts
+            |> Enum.map(&format_dsl_part_to_gemini_api_part/1)
+            |> Enum.reject(&is_nil(&1))
+
+          if Enum.empty?(api_parts), do: nil, else: %{role: "model", parts: api_parts}
       end)
+      |> Enum.reject(&is_nil(&1))
 
     if system_instruction do
       %{system_instruction: system_instruction, contents: gemini_api_contents}

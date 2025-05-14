@@ -1,7 +1,7 @@
 defmodule BeamMePrompty.Agent.Dsl do
   use TypedStruct
 
-  @type part_type() :: :text | :file | :data | :function_result
+  @type part_type() :: :text | :file | :data | :function_result | :function_call
 
   @type role() :: :user | :assistant | :system
 
@@ -38,9 +38,26 @@ defmodule BeamMePrompty.Agent.Dsl do
     field :result, any()
   end
 
+  typedstruct module: FunctionCallPart do
+    @derive Jason.Encoder
+    field :function_call, %{
+      optional(:id) => String.t(),
+      optional(:name) => String.t(),
+      optional(:arguments) => map()
+    }
+  end
+
   typedstruct module: Message do
     field :role, BeamMePrompty.Agent.Dsl.role()
-    field :content, list(TextPart.t() | FilePart.t() | DataPart.t() | FunctionResultPart.t())
+
+    field :content,
+          list(
+            TextPart.t()
+            | FilePart.t()
+            | DataPart.t()
+            | FunctionResultPart.t()
+            | FunctionCallPart.t()
+          )
   end
 
   typedstruct module: Tool do
