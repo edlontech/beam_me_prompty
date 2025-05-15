@@ -14,6 +14,8 @@ defmodule BeamMePrompty.MixProject do
 
   def application do
     [
+      mod: {BeamMePrompty, []},
+      env: [],
       extra_applications: [:logger]
     ]
   end

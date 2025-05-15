@@ -9,7 +9,7 @@ defmodule BeamMePrompty.Agent.StagesSupervisor do
 
   @doc false
   def start_link(_init_arg) do
-    DynamicSupervisor.start_link(__MODULE__, :ok, name: __MODULE__)
+    DynamicSupervisor.start_link(__MODULE__, :ok)
   end
 
   @impl true

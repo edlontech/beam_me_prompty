@@ -49,13 +49,14 @@ defmodule BeamMePrompty.Agent do
       use BeamMePrompty.Agent.Executor
 
       @doc false
-      def child_spec(start_opts) do
+      def child_spec(start_opts \\ []) do
+        start_opts = Keyword.put_new(start_opts, :session_id, make_ref())
+
         %{
-          id: __MODULE__,
+          id: start_opts[:session_id],
           start: {__MODULE__, :start_link, [start_opts]},
           restart: :transient
         }
-        |> Supervisor.child_spec([])
       end
 
       @doc false

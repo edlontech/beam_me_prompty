@@ -128,20 +128,16 @@ defmodule BeamMePrompty.Agent.Executor do
 
   def start_link(module, input, state, opts) do
     dag = DAG.build(module.stages())
+    session_id = Keyword.get(opts, :session_id, make_ref())
 
     with :ok <- DAG.validate(dag),
          {:ok, opts} <- ExecutorOptions.validate(opts) do
       init = {dag, input, state, opts, module}
-      apply(GenStateMachine, :start_link, args(init, opts[:name]))
+
+      GenStateMachine.start_link(BeamMePrompty.Agent.Internals, init,
+        name: executor_id(session_id)
+      )
     end
-  end
-
-  defp args(init, nil) do
-    [BeamMePrompty.Agent.Internals, init, []]
-  end
-
-  defp args(init, name) do
-    [name, BeamMePrompty.Agent.Internals, init, []]
   end
 
   defp poll_for_completion(pid, timeout, interval \\ 100) do
@@ -180,4 +176,7 @@ defmodule BeamMePrompty.Agent.Executor do
         error
     end
   end
+
+  defp executor_id(session_id),
+    do: {:via, Registry, {:agents, session_id}}
 end
