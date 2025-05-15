@@ -314,7 +314,7 @@ defmodule BeamMePrompty.Agent.Internals do
     data_with_stage_agent_state = %{data | current_state: agent_state_from_stage}
 
     stage_execution_error =
-      Errors.StageExecutionError.exception(
+      Errors.ExecutionError.exception(
         stage: node_name,
         cause: reason_of_error
       )

@@ -7,9 +7,9 @@ defmodule BeamMePrompty.Errors.ExecutionError do
   that the error originates from within the framework's execution pipeline.
   """
 
-  use Splode.Error, fields: [:step, :cause], class: :framework
+  use Splode.Error, fields: [:stage, :cause], class: :framework
 
-  def message(%{step: step, cause: cause}) do
-    "Agent execution error at step #{inspect(step)}: #{inspect(cause)}"
+  def message(%{stage: stage, cause: cause}) do
+    "Agent execution error at stage #{inspect(stage)}: #{inspect(cause)}"
   end
 end
