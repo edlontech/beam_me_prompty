@@ -1,4 +1,30 @@
 defmodule BeamMePrompty.Agent.Dsl do
+  @moduledoc """
+  A Domain-Specific Language (DSL) for defining LLM agents in BeamMePrompty.
+
+  This module provides a declarative way to configure multi-stage LLM agents with
+  tools, messages, and specific model configurations using the Spark DSL framework.
+
+  ## Components
+
+  The DSL defines several key components:
+
+  * **Stages**: Sequential or dependent processing steps in an agent pipeline
+  * **LLMs**: Language model configurations with specific parameters
+  * **Messages**: Structured content passed to/from the LLMs
+  * **Tools**: Function-like capabilities that can be invoked by the LLM
+
+  ## Message Content Types
+
+  Messages can contain different types of content:
+
+  * `TextPart`: Simple text content
+  * `FilePart`: File references (name, mime_type, bytes, uri)
+  * `DataPart`: Structured data as maps
+  * `FunctionResultPart`: Results from tool executions
+  * `FunctionCallPart`: Tool invocation requests
+  """
+
   use TypedStruct
 
   @type part_type() :: :text | :file | :data | :function_result | :function_call
@@ -8,13 +34,13 @@ defmodule BeamMePrompty.Agent.Dsl do
   @type openapi_schema() :: map()
 
   typedstruct module: TextPart do
-    @derive Jason.Encoder
+    @moduledoc false
     field :type, :text
     field :text, String.t()
   end
 
   typedstruct module: FilePart do
-    @derive Jason.Encoder
+    @moduledoc false
     field :type, :file
 
     field :file, %{
@@ -26,20 +52,20 @@ defmodule BeamMePrompty.Agent.Dsl do
   end
 
   typedstruct module: DataPart do
-    @derive Jason.Encoder
+    @moduledoc false
     field :type, :data
     field :data, map()
   end
 
   typedstruct module: FunctionResultPart do
-    @derive Jason.Encoder
+    @moduledoc false
     field :id, String.t() | nil
     field :name, String.t()
     field :result, any()
   end
 
   typedstruct module: FunctionCallPart do
-    @derive Jason.Encoder
+    @moduledoc false
     field :function_call, %{
       optional(:id) => String.t(),
       optional(:name) => String.t(),
@@ -48,6 +74,7 @@ defmodule BeamMePrompty.Agent.Dsl do
   end
 
   typedstruct module: Message do
+    @moduledoc false
     field :role, BeamMePrompty.Agent.Dsl.role()
 
     field :content,
@@ -61,6 +88,7 @@ defmodule BeamMePrompty.Agent.Dsl do
   end
 
   typedstruct module: Tool do
+    @moduledoc false
     field :module, module()
     field :name, atom()
     field :description, String.t()
@@ -68,6 +96,7 @@ defmodule BeamMePrompty.Agent.Dsl do
   end
 
   typedstruct module: LLMParams do
+    @moduledoc false
     field :max_tokens, integer() | nil
     field :temperature, float() | nil
     field :top_p, float() | nil
@@ -81,6 +110,7 @@ defmodule BeamMePrompty.Agent.Dsl do
   end
 
   typedstruct module: LLM do
+    @moduledoc false
     field :model, String.t()
     field :llm_client, {module(), keyword()}
     field :params, LLMParams.t() | nil
@@ -89,6 +119,7 @@ defmodule BeamMePrompty.Agent.Dsl do
   end
 
   typedstruct module: Stage do
+    @moduledoc false
     field :name, atom()
     field :depends_on, list(String.t()) | nil
     field :llm, LLM.t() | nil

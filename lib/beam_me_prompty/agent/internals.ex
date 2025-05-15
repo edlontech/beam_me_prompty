@@ -1,4 +1,23 @@
 defmodule BeamMePrompty.Agent.Internals do
+  @moduledoc """
+  Internal implementation of the BeamMePrompty Agent execution engine.
+
+  This module is responsible for executing a directed acyclic graph (DAG) of operations
+  in the correct order, respecting dependencies between nodes. It uses a state machine 
+  approach to manage the execution flow:
+
+  1. `waiting_for_plan`: Determines which nodes are ready to execute based on dependencies
+  2. `execute_nodes`: Dispatches execution requests to stage workers
+  3. `awaiting_stage_results`: Collects results from completed stage executions
+  4. `completed`: Final state when all nodes have been executed
+
+  The module maintains a supervision tree for stage workers and handles error conditions
+  during the execution process. Results from each node are collected and can be accessed
+  after completion.
+
+  This is an internal module and should not be used directly unless you understand the 
+  implications. Instead, use the public API provided by the BeamMePrompty.Agent module.
+  """
   use GenStateMachine, callback_mode: :state_functions
 
   defstruct [

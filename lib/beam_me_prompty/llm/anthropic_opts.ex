@@ -1,4 +1,21 @@
 defmodule BeamMePrompty.LLM.AnthropicOpts do
+  @moduledoc """
+  Provides configuration options and validation for Anthropic's Claude API integration.
+
+  This module defines and validates the configuration schema for interacting with 
+  Anthropic's Large Language Models (LLMs). It ensures that all required parameters 
+  are properly formatted and handles the transformation of BeamMePrompty's internal 
+  configuration format to Anthropic's expected API parameters.
+
+  The module supports all major Anthropic API parameters including:
+  - Model selection
+  - Inference parameters (temperature, top_k, top_p)
+  - Token limits
+  - API authentication
+  - Claude's thinking feature
+  - Function calling tools
+  """
+
   @schema NimbleOptions.new!(
             max_tokens: [
               type: :non_neg_integer,

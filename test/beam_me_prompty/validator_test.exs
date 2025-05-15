@@ -103,7 +103,7 @@ defmodule BeamMePrompty.ValidatorTest do
           address: %{
             street: "123 Main St",
             # Should be a string
-            city: 12345
+            city: 12_345
           }
         }
       }

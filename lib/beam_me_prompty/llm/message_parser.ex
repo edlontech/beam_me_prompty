@@ -9,6 +9,8 @@ defmodule BeamMePrompty.LLM.MessageParser do
   Supports nested map access, list indexing, and simple function calls.
   Handles both string and atom keys in the inputs map.
   """
+  @spec parse([%{role: atom(), content: [TextPart.t()]}], map()) ::
+          [{atom(), [TextPart.t()]}]
   def parse(messages, inputs) do
     Enum.map(messages, fn
       %{role: role, content: parts} ->

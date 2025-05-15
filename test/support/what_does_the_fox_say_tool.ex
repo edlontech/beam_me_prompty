@@ -1,4 +1,5 @@
 defmodule BeamMePrompty.WhatDoesTheFoxSayTool do
+  @moduledoc false
   @behaviour BeamMePrompty.Tool
 
   @impl true

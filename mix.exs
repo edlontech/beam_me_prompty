@@ -20,6 +20,7 @@ defmodule BeamMePrompty.MixProject do
 
   defp deps do
     [
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:gen_state_machine, "~> 3.0"},
       {:hammox, "~> 0.7", only: :test},
       {:mustache, "~> 0.5"},
@@ -29,7 +30,7 @@ defmodule BeamMePrompty.MixProject do
       {:req, "~> 0.5"},
       {:spark, "~> 2.2.55"},
       {:splode, "~> 0.2"},
-      {:typedstruct, "~> 0.5.3"},
+      {:typedstruct, "~> 0.5.3"}
     ]
   end
 

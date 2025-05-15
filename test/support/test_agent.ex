@@ -1,4 +1,5 @@
 defmodule BeamMePrompty.TestAgent do
+  @moduledoc false
   use BeamMePrompty.Agent
 
   alias BeamMePrompty.Agent.Dsl.TextPart

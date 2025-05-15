@@ -1,4 +1,21 @@
 defmodule BeamMePrompty.Agent.Executor do
+  @moduledoc """
+  Agent execution engine for BeamMePrompty.
+
+  This module provides a behavior and execution infrastructure for BeamMePrompty agents.
+  It handles the lifecycle of agent execution including starting, monitoring, and error handling
+  of agents as they process through their defined stages using a directed acyclic graph (DAG).
+
+  ## Behavior
+
+  When using this module, you can implement the required callbacks:
+
+    * `handle_error/2` - Called when errors occur during execution
+    * `handle_stage_start/2` - Called when a stage begins execution
+    * `handle_stage_finish/3` - Called when a stage completes execution
+    * `handle_complete/2` - Called when all stages complete
+  """
+
   alias BeamMePrompty.DAG
   alias BeamMePrompty.Agent.ExecutorOptions
   alias BeamMePrompty.Errors

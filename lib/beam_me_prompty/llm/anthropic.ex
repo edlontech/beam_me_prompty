@@ -1,4 +1,71 @@
 defmodule BeamMePrompty.LLM.Anthropic do
+  @moduledoc """
+  Interface to Anthropic's LLM API services for the BeamMePrompty application.
+
+  This module implements the `BeamMePrompty.LLM` behaviour and provides functionality
+  to interact with Anthropic's API for language model completions, including Claude models.
+  It handles formatting of messages, tools, and options to match Anthropic's API requirements,
+  and processes the responses accordingly.
+
+  ## Features
+
+  * Supports text completion with Anthropic's models
+  * Handles message formatting between BeamMePrompty's DSL and Anthropic's expected format
+  * Supports system prompts, user messages, and assistant messages
+  * Provides tools/function calling capabilities
+  * Supports image inputs via base64 encoding
+  * Manages API authentication and request configuration
+  * Handles error cases and converts them to appropriate error types
+
+  ## Usage
+
+  ```elixir
+  alias BeamMePrompty.LLM.Anthropic
+
+  # Basic usage
+  {:ok, response} = Anthropic.completion(
+    "claude-3-opus-20240229",
+    [user: [%TextPart{text: "Hello, how are you?"}]],
+    nil,
+    [key: "your-api-key", temperature: 0.7, max_tokens: 1000]
+  )
+
+  # With system prompt and tools
+  {:ok, response} = Anthropic.completion(
+    "claude-3-opus-20240229",
+    [
+      system: [%TextPart{text: "You are a helpful assistant."}],
+      user: [%TextPart{text: "Please help me calculate 2+2"}]
+    ],
+    [
+      function_declarations: [
+        %{
+          name: "calculate",
+          description: "Calculate a math expression",
+          parameters: %{
+            type: "object",
+            properties: %{
+              expression: %{type: "string", description: "Math expression to calculate"}
+            },
+            required: ["expression"]
+          }
+        }
+      ]
+    ],
+    [key: "your-api-key", temperature: 0.7, max_tokens: 1000]
+  )
+  ```
+
+  The module supports various content types through the DSL:
+  - `TextPart` - For regular text messages
+  - `DataPart` - For structured JSON data
+  - `FilePart` - For images and other binary content
+  - `FunctionCallPart` - For initiating tool/function calls
+  - `FunctionResultPart` - For handling function results
+
+  See `BeamMePrompty.LLM.AnthropicOpts` for available configuration options.
+  """
+
   @behaviour BeamMePrompty.LLM
 
   alias BeamMePrompty.Agent.Dsl.{

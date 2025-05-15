@@ -1,9 +1,108 @@
 defmodule BeamMePrompty.LLM.GoogleGemini do
   @moduledoc """
-  Google Gemini API adapter implementing the BeamMePrompty.LLM behaviour.
-  Constructs requests, communicates with the Gemini endpoint via Req,
-  and parses responses into plain text or structured output for agents.
+  Interface to Google's Gemini API services for the BeamMePrompty application.
+
+  This module implements the `BeamMePrompty.LLM` behaviour and provides functionality
+  to interact with Google's Gemini API for language model completions. It handles
+  formatting of messages, tools, and options to match Gemini's API requirements,
+  and processes the responses accordingly.
+
+  ## Features
+
+  * Supports text completion with Google's Gemini models
+  * Handles message formatting between BeamMePrompty's DSL and Gemini's expected format
+  * Supports system instructions, user messages, and assistant messages
+  * Provides function calling capabilities
+  * Supports image inputs via base64 encoding
+  * Manages API authentication and request configuration
+  * Handles error cases and converts them to appropriate error types
+
+  ## Usage
+
+  ```elixir
+  alias BeamMePrompty.LLM.GoogleGemini
+
+  # Basic usage
+  {:ok, response} = GoogleGemini.completion(
+    "gemini-pro",
+    [user: [%TextPart{text: "Hello, how are you?"}]],
+    nil,
+    [key: "your-api-key", temperature: 0.7, max_output_tokens: 1000]
+  )
+
+  # With system instruction and function calling
+  {:ok, response} = GoogleGemini.completion(
+    "gemini-pro",
+    [
+      system: [%TextPart{text: "You are a helpful assistant."}],
+      user: [%TextPart{text: "Please help me calculate 2+2"}]
+    ],
+    %{
+      function_declarations: [
+        %{
+          name: "calculate",
+          description: "Calculate a math expression",
+          parameters: %{
+            type: "object",
+            properties: %{
+              expression: %{type: "string", description: "Math expression to calculate"}
+            },
+            required: ["expression"]
+          }
+        }
+      ]
+    },
+    [key: "your-api-key", temperature: 0.7, max_output_tokens: 1000]
+  )
+
+  # With image input
+  {:ok, response} = GoogleGemini.completion(
+    "gemini-pro-vision",
+    [
+      user: [
+        %TextPart{text: "Describe this image:"},
+        %FilePart{file: %{bytes: image_bytes, mime_type: "image/jpeg"}}
+      ]
+    ],
+    nil,
+    [key: "your-api-key"]
+  )
+  ```
+
+  The module supports various content types through the DSL:
+  - `TextPart` - For regular text messages
+  - `DataPart` - For structured JSON data
+  - `FilePart` - For images and other binary content
+  - `FunctionCallPart` - For initiating function calls
+  - `FunctionResultPart` - For handling function results
+
+  ## Response Schema
+
+  You can also specify a response schema to get structured JSON responses:
+
+  ```elixir
+  {:ok, response} = GoogleGemini.completion(
+    "gemini-pro",
+    [user: [%TextPart{text: "List 3 planets in the solar system"}]],
+    nil,
+    [
+      key: "your-api-key",
+      response_schema: %{
+        type: "object",
+        properties: %{
+          planets: %{
+            type: "array",
+            items: %{type: "string"}
+          }
+        }
+      }
+    ]
+  )
+  ```
+
+  See `BeamMePrompty.LLM.GoogleGeminiOpts` for available configuration options.
   """
+
   @behaviour BeamMePrompty.LLM
 
   alias BeamMePrompty.Errors

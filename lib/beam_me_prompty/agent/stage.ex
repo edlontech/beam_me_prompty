@@ -1,8 +1,28 @@
 defmodule BeamMePrompty.Agent.Stage do
+  @moduledoc """
+  A GenStateMachine implementation that handles the execution of individual stages within a BeamMePrompty Agent's DAG.
+
+  This module is responsible for:
+
+  * Processing LLM interactions for a single stage/node in the execution graph
+  * Handling tool calling functionality, allowing LLMs to invoke tools during execution
+  * Managing message history and state for each stage
+  * Communicating results back to the parent agent process
+
+  Each stage operates independently, processing its assigned node's configuration, executing
+  LLM calls with appropriate context, handling any tool invocations, and returning the final
+  result to the caller.
+
+  The state machine primarily stays in an `:idle` state, processing execution requests 
+  as they arrive and maintaining its conversation history between executions.
+
+  This module is part of the internal execution engine of BeamMePrompty and is typically
+  managed by the `BeamMePrompty.Agent.Internals` module through a supervisor.
+  """
+
   use GenStateMachine, callback_mode: :state_functions
 
   alias BeamMePrompty.Agent.Dsl.{FunctionResultPart, TextPart, FunctionCallPart, DataPart}
-  alias BeamMePrompty.Agent.Dsl.Message
   alias BeamMePrompty.Errors
   alias BeamMePrompty.LLM.MessageParser
 
@@ -12,6 +32,7 @@ defmodule BeamMePrompty.Agent.Stage do
     :tool_responses
   ]
 
+  @doc false
   def start_link(stage_name) do
     GenStateMachine.start_link(__MODULE__, stage_name, [])
   end
@@ -59,11 +80,11 @@ defmodule BeamMePrompty.Agent.Stage do
     dependency_results = exec_context[:dependency_results] || %{}
     inputs = Map.merge(global_input, dependency_results)
 
-    with {:ok, llm_result, updated_messages} <-
-           maybe_call_llm(stage_node.llm, inputs, data.messages) do
-      updated_data = %{data | messages: updated_messages}
-      {:ok, llm_result, updated_data}
-    else
+    case maybe_call_llm(stage_node.llm, inputs, data.messages) do
+      {:ok, llm_result, updated_messages} ->
+        updated_data = %{data | messages: updated_messages}
+        {:ok, llm_result, updated_data}
+
       {:error, reason} ->
         {:error, Errors.to_class(reason), data}
 
@@ -75,17 +96,17 @@ defmodule BeamMePrompty.Agent.Stage do
 
   # --- Tool Calling Helpers ---
 
-  defp is_function_call_response(%{function_call: %{name: name}} = response) when is_binary(name),
+  defp function_call_response(%{function_call: %{name: name}} = response) when is_binary(name),
     do: {:tool, response}
 
-  defp is_function_call_response(parts) when is_list(parts) do
+  defp function_call_response(parts) when is_list(parts) do
     case Enum.find(parts, &is_map_key(&1, :function_call)) do
       nil -> {:ok, parts}
       tool -> {:tool, tool}
     end
   end
 
-  defp is_function_call_response(response), do: {:ok, response}
+  defp function_call_response(response), do: {:ok, response}
 
   # --- LLM Interaction Logic ---
 
@@ -157,7 +178,7 @@ defmodule BeamMePrompty.Agent.Stage do
         assistant_response_message = format_response(llm_response)
         history_after_llm_response = messages_to_send_to_llm ++ [assistant_response_message]
 
-        case is_function_call_response(llm_response) do
+        case function_call_response(llm_response) do
           {:ok, llm_response} ->
             {:ok, llm_response, history_after_llm_response}
 
