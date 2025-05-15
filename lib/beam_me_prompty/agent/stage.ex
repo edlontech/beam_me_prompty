@@ -30,9 +30,7 @@ defmodule BeamMePrompty.Agent.Stage do
     :stage_name,
     :messages,
     :tool_responses,
-    # Added to store the agent module implementation
     :agent_module,
-    # Added to store and manage agent's state locally
     :current_agent_state
   ]
 
@@ -49,14 +47,11 @@ defmodule BeamMePrompty.Agent.Stage do
         s_name -> s_name
       end
 
-    # Initialize new fields
     initial_data = %__MODULE__{
       stage_name: actual_stage_name,
       messages: [],
       tool_responses: [],
-      # Will be set on first execute
       agent_module: nil,
-      # Will be set on first execute
       current_agent_state: %{}
     }
 
@@ -64,8 +59,6 @@ defmodule BeamMePrompty.Agent.Stage do
   end
 
   def idle(:cast, {:execute, node_name, node_def, node_ctx, caller_pid}, data) do
-    # Store agent_module and current_agent_state from node_ctx
-    # node_ctx should contain :agent_module and :current_agent_state from Internals
     agent_module_from_ctx = node_ctx[:agent_module]
     agent_state_from_ctx = node_ctx[:current_agent_state]
 
@@ -75,19 +68,13 @@ defmodule BeamMePrompty.Agent.Stage do
         current_agent_state: agent_state_from_ctx
     }
 
-    # Call agent's handle_stage_start
-    # handle_stage_start(stage :: map(), inner_state :: map()) :: :ok
-    # This callback is for side-effects and doesn't modify agent state directly here.
     if agent_module_from_ctx do
       agent_module_from_ctx.handle_stage_start(node_def, agent_state_from_ctx)
     end
 
-    # Proceed with stage execution, passing the full data struct which now includes agent context
-    # do_execute_stage will now return {status, payload, updated_stage_data_including_agent_state}
     {stage_execution_result, result_payload, final_stage_data} =
       do_execute_stage(node_def, node_ctx, data_with_agent_context)
 
-    # Send response back to Internals, including the final agent state from this stage
     case stage_execution_result do
       :ok ->
         send(
@@ -104,7 +91,6 @@ defmodule BeamMePrompty.Agent.Stage do
         )
     end
 
-    # Stay in idle state, ready for next command with updated data (including potentially changed agent_state)
     {:next_state, :idle, final_stage_data}
   end
 
@@ -119,28 +105,22 @@ defmodule BeamMePrompty.Agent.Stage do
 
   # --- Private Helper Functions for Stage Execution ---
 
-  # do_execute_stage now returns a tuple: {:ok | :error, result_payload, updated_data_for_state}
   defp do_execute_stage(stage_node_def, exec_context, stage_data) do
     global_input = exec_context[:global_input] || %{}
     dependency_results = exec_context[:dependency_results] || %{}
     inputs_for_llm = Map.merge(global_input, dependency_results)
 
-    # Pass agent_module and current_agent_state from stage_data to maybe_call_llm
     case maybe_call_llm(
            stage_node_def.llm,
            inputs_for_llm,
            stage_data.messages,
-           # Pass agent_module from stage_data
            stage_data.agent_module,
-           # Pass current_agent_state from stage_data
            stage_data.current_agent_state
          ) do
-      # Expecting maybe_call_llm to return agent_state potentially modified by LLM/tools
       {:ok, llm_result, updated_messages_history, final_agent_state_after_llm} ->
         updated_stage_data = %{
           stage_data
           | messages: updated_messages_history,
-            # Persist agent state changes
             current_agent_state: final_agent_state_after_llm
         }
 
@@ -150,7 +130,6 @@ defmodule BeamMePrompty.Agent.Stage do
         updated_stage_data_on_error = %{
           stage_data
           | messages: updated_messages_history,
-            # Persist state even on error
             current_agent_state: final_agent_state_after_llm_error
         }
 
@@ -183,7 +162,6 @@ defmodule BeamMePrompty.Agent.Stage do
 
   # --- LLM Interaction Logic ---
 
-  # Updated to accept and return agent_module and current_agent_state
   defp maybe_call_llm(
          [config | _rest_configs],
          input,
@@ -208,24 +186,19 @@ defmodule BeamMePrompty.Agent.Stage do
         llm_params,
         initial_messages_history,
         stage_prompt_messages,
-        # Max iterations
         5,
         agent_module,
-        # Pass current agent state
         current_agent_state
       )
     else
-      # No LLM configured for this stage, return current agent state unchanged
       {:ok, %{}, initial_messages_history, current_agent_state}
     end
   end
 
   defp maybe_call_llm([], _input, current_messages, _agent_module, current_agent_state) do
-    # No LLM configurations, return current agent state unchanged
     {:ok, %{}, current_messages, current_agent_state}
   end
 
-  # Fallback for non-map config or other cases, return current agent state unchanged
   defp maybe_call_llm(
          _unhandled_config,
          _input,
@@ -236,7 +209,6 @@ defmodule BeamMePrompty.Agent.Stage do
     {:ok, %{}, current_messages, current_agent_state}
   end
 
-  # Updated to accept and return agent_module and current_agent_state
   defp process_llm_interactions(
          _llm_client,
          _model,
@@ -260,9 +232,7 @@ defmodule BeamMePrompty.Agent.Stage do
          accumulated_messages,
          current_request_messages,
          remaining_iterations,
-         # Added
          agent_module,
-         # Added
          current_agent_state
        ) do
     messages_to_send_to_llm = accumulated_messages ++ current_request_messages
@@ -286,19 +256,15 @@ defmodule BeamMePrompty.Agent.Stage do
           llm_params,
           history_after_llm_response,
           remaining_iterations,
-          # Pass through
           agent_module,
-          # Pass through
           current_agent_state
         )
 
       {:error, reason} ->
-        # Return current agent state on error, along with messages
         {:error, reason, accumulated_messages, current_agent_state}
     end
   end
 
-  # Updated to accept and return agent_module and current_agent_state
   defp handle_llm_response(
          llm_response_content,
          llm_client,
@@ -307,18 +273,13 @@ defmodule BeamMePrompty.Agent.Stage do
          llm_params,
          message_history,
          remaining_iterations,
-         # Added
          agent_module,
-         # Added
          current_agent_state
        ) do
     case function_call_response(llm_response_content) do
-      # No tool call, direct response
       {:ok, final_llm_content} ->
-        # Return current agent state, as no tool interaction modified it here
         {:ok, final_llm_content, message_history, current_agent_state}
 
-      # LLM wants to call a tool
       {:tool, tool_function_call_part} ->
         function_call_details = tool_function_call_part.function_call
         tool_name_atom = String.to_existing_atom(function_call_details.name)
@@ -329,8 +290,6 @@ defmodule BeamMePrompty.Agent.Stage do
           tool_call_id: Map.get(function_call_details, :id)
         }
 
-        # Call agent's handle_tool_call before actual tool execution
-        # handle_tool_call(tool_name :: atom(), tool_args :: map(), inner_state :: map())
         {tool_call_status, agent_state_after_tool_call_cb} =
           if agent_module do
             agent_module.handle_tool_call(
@@ -346,7 +305,6 @@ defmodule BeamMePrompty.Agent.Stage do
         updated_agent_state_post_handle_tool_call =
           case tool_call_status do
             :ok -> agent_state_after_tool_call_cb
-            # Keep original state on error from callback
             _ -> current_agent_state
           end
 
@@ -367,11 +325,8 @@ defmodule BeamMePrompty.Agent.Stage do
     end
   end
 
-  # Updated to accept and return agent_module and current_agent_state
   defp handle_tool_execution(
-         # Tool definition not found
          nil,
-         # Contains :tool_name, :tool_args, :tool_call_id
          tool_info,
          llm_client,
          model,
@@ -379,9 +334,7 @@ defmodule BeamMePrompty.Agent.Stage do
          llm_params,
          message_history,
          remaining_iterations,
-         # Added
          agent_module,
-         # Added
          current_agent_state
        ) do
     error_content_for_llm = "Tool not defined: #{tool_info.tool_name}"
@@ -394,8 +347,6 @@ defmodule BeamMePrompty.Agent.Stage do
       )
     ]
 
-    # Call agent's handle_tool_result (for the error of tool not found)
-    # handle_tool_result(tool_name :: atom(), result :: term(), inner_state :: map())
     tool_execution_outcome_for_agent = {:error, error_content_for_llm}
 
     {tool_result_status, agent_state_after_tool_result_cb} =
@@ -406,14 +357,12 @@ defmodule BeamMePrompty.Agent.Stage do
           current_agent_state
         )
       else
-        # Should not happen
         {:ok, current_agent_state}
       end
 
     updated_agent_state_post_tool_result_cb =
       case tool_result_status do
         :ok -> agent_state_after_tool_result_cb
-        # Keep state on error from callback
         _ -> current_agent_state
       end
 
@@ -432,9 +381,7 @@ defmodule BeamMePrompty.Agent.Stage do
   end
 
   defp handle_tool_execution(
-         # Tool definition found
          tool_def,
-         # Contains :tool_name, :tool_args, :tool_call_id
          tool_info,
          llm_client,
          model,
@@ -442,14 +389,11 @@ defmodule BeamMePrompty.Agent.Stage do
          llm_params,
          message_history,
          remaining_iterations,
-         # Added
          agent_module,
-         # Added
          current_agent_state
        ) do
     actual_tool_run_result = execute_tool(tool_def, tool_info.tool_args)
 
-    # Call agent's handle_tool_result with the actual tool execution outcome
     {tool_result_status, agent_state_after_tool_result_cb} =
       if agent_module do
         agent_module.handle_tool_result(
@@ -458,14 +402,12 @@ defmodule BeamMePrompty.Agent.Stage do
           current_agent_state
         )
       else
-        # Should not happen
         {:ok, current_agent_state}
       end
 
     updated_agent_state_post_tool_result_cb =
       case tool_result_status do
         :ok -> agent_state_after_tool_result_cb
-        # Keep state on error from callback
         _ -> current_agent_state
       end
 
@@ -485,7 +427,6 @@ defmodule BeamMePrompty.Agent.Stage do
       next_request_messages_for_llm,
       remaining_iterations,
       agent_module,
-      # Pass the updated agent state
       updated_agent_state_post_tool_result_cb
     )
   end

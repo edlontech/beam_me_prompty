@@ -46,16 +46,13 @@ defmodule BeamMePrompty.Agent.Internals do
 
   @impl true
   def init({dag, input, initial_agent_state, opts, agent_module_impl}) do
-    # Call agent's handle_init
     {init_status, new_agent_state_after_init} =
       agent_module_impl.handle_init(dag, initial_agent_state)
 
     current_agent_state =
       case init_status do
         :ok -> new_agent_state_after_init
-        # Allow {:ok, state} for explicit override
         {:ok, overidden_state} -> overidden_state
-        # Default to original if error or unexpected
         _ -> initial_agent_state
       end
 
@@ -80,9 +77,7 @@ defmodule BeamMePrompty.Agent.Internals do
           opts: opts,
           agent_module: agent_module_impl,
           global_input: input,
-          # This is the original state passed to Agent.start_link
           initial_state: initial_agent_state,
-          # This is the state potentially modified by agent's handle_init
           current_state: current_agent_state,
           started_at: System.monotonic_time(:millisecond),
           stages_supervisor_pid: sup_pid,
@@ -104,21 +99,18 @@ defmodule BeamMePrompty.Agent.Internals do
   def waiting_for_plan(:internal, :plan, data) do
     ready_nodes_from_dag = DAG.find_ready_nodes(data.dag, data.results)
 
-    # Call agent's handle_plan
     {plan_status, planned_nodes, new_agent_state_after_plan} =
       data.agent_module.handle_plan(ready_nodes_from_dag, data.current_state)
 
     current_agent_state_after_plan_callback =
       case plan_status do
         :ok -> new_agent_state_after_plan
-        # Keep old state on error from callback
         _ -> data.current_state
       end
 
     effective_ready_nodes =
       case plan_status do
         :ok -> planned_nodes
-        # Use original nodes on error from callback
         _ -> ready_nodes_from_dag
       end
 
@@ -139,7 +131,6 @@ defmodule BeamMePrompty.Agent.Internals do
            step: :waiting_for_plan,
            cause: "No nodes are ready to execute after agent's handle_plan"
          )}
-        # Use data with state updated by handle_plan
         |> handle_error(data_after_plan_callback)
 
       true ->
@@ -147,7 +138,6 @@ defmodule BeamMePrompty.Agent.Internals do
           Enum.map(effective_ready_nodes, fn node_name ->
             node_def = Map.get(data_after_plan_callback.dag.nodes, node_name)
 
-            # Prepare context for the stage, including the latest agent state and module
             node_context =
               Map.merge(data_after_plan_callback.initial_state, %{
                 dependency_results: data_after_plan_callback.results,
@@ -176,16 +166,12 @@ defmodule BeamMePrompty.Agent.Internals do
     if Enum.empty?(data.nodes_to_execute) do
       {:next_state, :waiting_for_plan, data, [{:next_event, :internal, :plan}]}
     else
-      # data.nodes_to_execute is [{node_name, node_def, node_ctx_with_agent_state}]
-
-      # Call agent's handle_batch_start
       {batch_start_status, new_agent_state_after_batch_start} =
         data.agent_module.handle_batch_start(data.nodes_to_execute, data.current_state)
 
       current_agent_state_after_batch_start_cb =
         case batch_start_status do
           :ok -> new_agent_state_after_batch_start
-          # Keep old state on error from callback
           _ -> data.current_state
         end
 
@@ -194,14 +180,11 @@ defmodule BeamMePrompty.Agent.Internals do
         | current_state: current_agent_state_after_batch_start_cb
       }
 
-      # Prepare details for error handling and store current batch info
-      # The node_ctx within nodes_to_execute needs to reflect the latest agent_state for the stage
       nodes_for_execution_with_updated_ctx =
         Enum.map(data_after_batch_start_cb.nodes_to_execute, fn {name, nd_def, nd_ctx} ->
           updated_nd_ctx =
             Map.put(nd_ctx, :current_agent_state, data_after_batch_start_cb.current_state)
 
-          # agent_module should already be in nd_ctx from waiting_for_plan
           {name, nd_def, updated_nd_ctx}
         end)
 
@@ -231,21 +214,16 @@ defmodule BeamMePrompty.Agent.Internals do
     end
   end
 
-  # Expect agent_state_from_stage in the message
   def awaiting_stage_results(
         :info,
         {:stage_response, node_name, {:ok, stage_result}, agent_state_from_stage},
         data
       ) do
-    # Update current_state with the state returned from the stage
     data_with_stage_agent_state = %{data | current_state: agent_state_from_stage}
 
-    # Call agent's handle_stage_finish
-    # handle_stage_finish(stage_def :: map(), result :: map(), inner_state :: map()) :: :ok
     {stage_node_definition, _node_ctx} =
       Map.get(data_with_stage_agent_state.current_batch_details, node_name)
 
-    # handle_stage_finish is for side effects or logging; its return value (:ok) doesn't change agent state here
     data_with_stage_agent_state.agent_module.handle_stage_finish(
       stage_node_definition,
       stage_result,
@@ -258,10 +236,8 @@ defmodule BeamMePrompty.Agent.Internals do
     updated_pending_nodes_in_batch =
       List.delete(data_with_stage_agent_state.pending_nodes, node_name)
 
-    # Call agent's handle_progress
     total_dag_nodes_count = map_size(data_with_stage_agent_state.dag.nodes)
 
-    # Completed nodes are those in main results + the one just finished (Map.put handles overwrite)
     dag_results_after_current_stage =
       Map.put(data_with_stage_agent_state.results, node_name, stage_result)
 
@@ -282,7 +258,6 @@ defmodule BeamMePrompty.Agent.Internals do
     current_agent_state_after_progress =
       case progress_status do
         :ok -> new_agent_state_after_progress_cb
-        # Keep state from before progress cb on error
         _ -> data_with_stage_agent_state.current_state
       end
 
@@ -303,12 +278,9 @@ defmodule BeamMePrompty.Agent.Internals do
       completed_dag_node_names = Map.keys(final_dag_results)
       pending_dag_nodes_list = all_dag_node_names -- completed_dag_node_names
 
-      # Call agent's handle_batch_complete
       {batch_complete_status, new_agent_state_after_batch_complete_cb} =
         data_after_progress_cb.agent_module.handle_batch_complete(
-          # Results of the just-completed batch
           data_after_progress_cb.temp_batch_results,
-          # All nodes still pending in the entire DAG
           pending_dag_nodes_list,
           data_after_progress_cb.current_state
         )
@@ -316,7 +288,6 @@ defmodule BeamMePrompty.Agent.Internals do
       current_agent_state_after_batch_complete =
         case batch_complete_status do
           :ok -> new_agent_state_after_batch_complete_cb
-          # Keep state from before batch_complete cb on error
           _ -> data_after_progress_cb.current_state
         end
 
@@ -324,9 +295,7 @@ defmodule BeamMePrompty.Agent.Internals do
         data_after_progress_cb
         | # Commit batch results to main DAG results
           results: final_dag_results,
-          # Reset for next batch
           temp_batch_results: %{},
-          # Reset for next batch
           current_batch_details: %{},
           current_state: current_agent_state_after_batch_complete
       }
@@ -342,33 +311,22 @@ defmodule BeamMePrompty.Agent.Internals do
         {:stage_response, node_name, {:error, reason_of_error}, agent_state_from_stage},
         data
       ) do
-    # Update current_state with the state returned from the stage, even on error
     data_with_stage_agent_state = %{data | current_state: agent_state_from_stage}
 
-    # Retrieve stage definition for context if needed by error reporting
-    # {stage_node_def, node_ctx} = Map.get(data_with_stage_agent_state.current_batch_details, node_name)
-
-    # Construct a structured error for the agent's handle_error callback
     stage_execution_error =
       Errors.StageExecutionError.exception(
         stage: node_name,
         cause: reason_of_error
-        # Consider if node_ctx should be part of the error; might contain sensitive data.
       )
 
-    # Prepare data for the main handle_error function.
-    # This ensures the agent's handle_error callback receives the most recent agent state.
     data_for_error_handling_cb = %{
       data_with_stage_agent_state
       | # Clear partial batch results as this batch errored
         temp_batch_results: %{},
-        # Clear pending nodes for this batch
         pending_nodes: [],
-        # Clear current batch details
         current_batch_details: %{}
     }
 
-    # The private handle_error/2 function will call the agent's handle_error callback
     handle_error({:error, stage_execution_error}, data_for_error_handling_cb)
   end
 
@@ -455,22 +413,16 @@ defmodule BeamMePrompty.Agent.Internals do
     {:keep_state, data}
   end
 
-  # This is called by GenStateMachine on exit/termination
   @impl true
   def terminate(reason, _state_name, data) do
     execution_status =
       case reason do
         :normal -> :completed
-        # Assuming :shutdown implies graceful completion
         :shutdown -> :completed
-        # More explicit shutdown completion
         {:shutdown, :completed} -> :completed
-        # All other reasons imply an error state
         _ -> :error
       end
 
-    # Call agent's handle_cleanup callback
-    # Ensure agent_module was initialized
     if data.agent_module do
       data.agent_module.handle_cleanup(execution_status, data.current_state)
     end
@@ -486,10 +438,8 @@ defmodule BeamMePrompty.Agent.Internals do
   defp handle_error({:error, error_detail}, data) do
     error_class_module = Errors.to_class(error_detail)
 
-    # Call agent's handle_error callback
     agent_error_response = data.agent_module.handle_error(error_class_module, data.current_state)
 
-    # Process the agent's decision from its handle_error callback
     case agent_error_response do
       {:retry, new_agent_state_for_retry} ->
         Logger.info("Agent requested retry. Transitioning to waiting_for_plan with new state.")
@@ -509,12 +459,6 @@ defmodule BeamMePrompty.Agent.Internals do
         {:stop, {:agent_stopped_execution, stop_reason}, data}
 
       {:restart, restart_reason} ->
-        # A true restart of the GenStateMachine is usually handled by a supervisor.
-        # For now, this will be treated as a stop with a specific reason.
-        Logger.warning(
-          "Agent requested restart with reason: #{inspect(restart_reason)}. Currently handled as stop."
-        )
-
         {:stop, {:agent_requested_restart_as_stop, restart_reason}, data}
 
       unexpected_response ->
