@@ -50,6 +50,7 @@ defmodule BeamMePrompty.Agent.Internals do
       {:ok, sup_pid} ->
         stage_workers =
           Enum.into(dag.nodes, %{}, fn {node_name, _node_definition} ->
+            # credo:disable-for-next-line
             case StagesSupervisor.start_stage_worker(sup_pid, node_name) do
               {:ok, stage_pid} ->
                 {node_name, stage_pid}

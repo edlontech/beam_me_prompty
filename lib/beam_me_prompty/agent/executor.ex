@@ -109,22 +109,8 @@ defmodule BeamMePrompty.Agent.Executor do
       {:ok, pid} ->
         ref = Process.monitor(pid)
 
-        check_completion = fn ->
-          case get_results(pid) do
-            {:ok, :completed, results} ->
-              Process.exit(pid, :normal)
-              {:ok, results}
-
-            {:ok, _} ->
-              :continue
-
-            error ->
-              error
-          end
-        end
-
         # Poll for completion with timeout
-        result = poll_for_completion(check_completion, timeout)
+        result = poll_for_completion(pid, timeout)
 
         # Clean up the monitor
         Process.demonitor(ref, [:flush])
@@ -158,26 +144,40 @@ defmodule BeamMePrompty.Agent.Executor do
     [name, BeamMePrompty.Agent.Internals, init, []]
   end
 
-  defp poll_for_completion(check_fn, timeout, interval \\ 100) do
+  defp poll_for_completion(pid, timeout, interval \\ 100) do
     end_time = System.monotonic_time(:millisecond) + timeout
 
-    poll_loop(check_fn, end_time, interval)
+    poll_loop(pid, end_time, interval)
   end
 
-  defp poll_loop(check_fn, end_time, interval) do
-    case check_fn.() do
+  defp poll_loop(pid, end_time, interval) do
+    case check_completion(pid) do
       :continue ->
         current_time = System.monotonic_time(:millisecond)
 
         if current_time < end_time do
           Process.sleep(interval)
-          poll_loop(check_fn, end_time, interval)
+          poll_loop(pid, end_time, interval)
         else
           {:error, :timeout}
         end
 
       result ->
         result
+    end
+  end
+
+  defp check_completion(pid) do
+    case get_results(pid) do
+      {:ok, :completed, results} ->
+        Process.exit(pid, :normal)
+        {:ok, results}
+
+      {:ok, _} ->
+        :continue
+
+      error ->
+        error
     end
   end
 end

@@ -196,6 +196,7 @@ defmodule BeamMePrompty.LLM.Anthropic do
     )
   end
 
+  # credo:disable-for-next-line
   defp format_dsl_part(part) do
     case part do
       %TextPart{text: text_content} when is_binary(text_content) ->

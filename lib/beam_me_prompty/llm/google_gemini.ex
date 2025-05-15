@@ -239,6 +239,7 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
     )
   end
 
+  # credo:disable-for-next-line
   defp format_dsl_part_to_gemini_api_part(part) do
     case part do
       %TextPart{text: text_content} when is_binary(text_content) ->

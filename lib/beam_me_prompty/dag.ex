@@ -97,6 +97,7 @@ defmodule BeamMePrompty.DAG do
         node_config = Map.get(dag.nodes, node)
         dependencies = node_config.depends_on || []
 
+        # credo:disable-for-next-line
         Enum.all?(dependencies, fn dep -> Map.has_key?(results, dep) end)
       end
     end)
@@ -117,6 +118,7 @@ defmodule BeamMePrompty.DAG do
         if MapSet.member?(visited, node) do
           {:cont, :ok}
         else
+          # credo:disable-for-next-line
           case has_cycle?(dag, node, visited, temp_visited) do
             {:ok, new_visited} -> {:cont, {:ok, new_visited}}
             {:error, _} = error -> {:halt, error}
@@ -142,6 +144,7 @@ defmodule BeamMePrompty.DAG do
 
         result =
           Enum.reduce_while(dependencies, {:ok, visited}, fn dep, {:ok, acc_visited} ->
+            # credo:disable-for-next-line
             case has_cycle?(dag, dep, acc_visited, temp_visited) do
               {:ok, new_visited} -> {:cont, {:ok, new_visited}}
               {:error, _} = error -> {:halt, error}
