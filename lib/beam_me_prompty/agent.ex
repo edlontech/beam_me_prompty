@@ -8,7 +8,7 @@ defmodule BeamMePrompty.Agent do
 
       agent do
         stage :planning do
-          llm "gpt-4", BeamMePrompty.LLM.OpenAI do
+          llm "gemini-2.0-flash", BeamMePrompty.LLM.GoogleGemini do
             with_params max_tokens: 1000, temperature: 0.7
             
             message :system, [
@@ -31,8 +31,8 @@ defmodule BeamMePrompty.Agent do
           end
         end
         
-        stage :execution, depends_on: [:planning] do
-          # Configuration for execution stage
+        stage :execution  do
+          depends_on [:planning]
         end
       end
     end
@@ -44,6 +44,24 @@ defmodule BeamMePrompty.Agent do
       extensions: [BeamMePrompty.Agent.Dsl]
     ]
 
+  @typedoc """
+  Startup options for agents
+
+  ## Parameters
+    * `input` - Global input data for the agent (optional, defaults to empty map)
+    * `initial_state` - The initial state of the agent (optional, defaults to empty map)
+    * `opts` - Additional options (see `start_link/4`)
+    * `session_id` - Unique identifier for the agent session (optional, defaults to a new reference)
+  """
+  @type agent_opts ::
+          keyword(
+            input: map(),
+            initial_state: map(),
+            opts: keyword(),
+            session_id: reference()
+          )
+
+  @doc false
   def handle_before_compile(_keyword) do
     quote do
       use BeamMePrompty.Agent.Executor
