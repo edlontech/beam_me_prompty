@@ -22,7 +22,7 @@ defmodule BeamMePrompty.Agent.Internals do
 
   defstruct [
     :dag,
-    :module,
+    :agent_module,
     :global_input,
     :nodes_to_execute,
     :initial_state,
@@ -45,12 +45,24 @@ defmodule BeamMePrompty.Agent.Internals do
   alias BeamMePrompty.Errors
 
   @impl true
-  def init({dag, input, state, opts, module}) do
+  def init({dag, input, initial_agent_state, opts, agent_module_impl}) do
+    # Call agent's handle_init
+    {init_status, new_agent_state_after_init} =
+      agent_module_impl.handle_init(dag, initial_agent_state)
+
+    current_agent_state =
+      case init_status do
+        :ok -> new_agent_state_after_init
+        # Allow {:ok, state} for explicit override
+        {:ok, overidden_state} -> overidden_state
+        # Default to original if error or unexpected
+        _ -> initial_agent_state
+      end
+
     case StagesSupervisor.start_link(:ok) do
       {:ok, sup_pid} ->
         stage_workers =
           Enum.into(dag.nodes, %{}, fn {node_name, _node_definition} ->
-            # credo:disable-for-next-line
             case StagesSupervisor.start_stage_worker(sup_pid, node_name) do
               {:ok, stage_pid} ->
                 {node_name, stage_pid}
@@ -66,10 +78,12 @@ defmodule BeamMePrompty.Agent.Internals do
         data = %__MODULE__{
           dag: dag,
           opts: opts,
-          module: module,
+          agent_module: agent_module_impl,
           global_input: input,
-          initial_state: state,
-          current_state: state,
+          # This is the original state passed to Agent.start_link
+          initial_state: initial_agent_state,
+          # This is the state potentially modified by agent's handle_init
+          current_state: current_agent_state,
           started_at: System.monotonic_time(:millisecond),
           stages_supervisor_pid: sup_pid,
           stage_workers: stage_workers,
@@ -88,37 +102,69 @@ defmodule BeamMePrompty.Agent.Internals do
   end
 
   def waiting_for_plan(:internal, :plan, data) do
-    ready_nodes = DAG.find_ready_nodes(data.dag, data.results)
+    ready_nodes_from_dag = DAG.find_ready_nodes(data.dag, data.results)
+
+    # Call agent's handle_plan
+    {plan_status, planned_nodes, new_agent_state_after_plan} =
+      data.agent_module.handle_plan(ready_nodes_from_dag, data.current_state)
+
+    current_agent_state_after_plan_callback =
+      case plan_status do
+        :ok -> new_agent_state_after_plan
+        # Keep old state on error from callback
+        _ -> data.current_state
+      end
+
+    effective_ready_nodes =
+      case plan_status do
+        :ok -> planned_nodes
+        # Use original nodes on error from callback
+        _ -> ready_nodes_from_dag
+      end
+
+    data_after_plan_callback = %{data | current_state: current_agent_state_after_plan_callback}
 
     cond do
-      map_size(data.results) == map_size(data.dag.nodes) ->
-        data.module.handle_complete(data.results, data.current_state)
-        {:next_state, :completed, data}
+      map_size(data_after_plan_callback.results) == map_size(data_after_plan_callback.dag.nodes) ->
+        data_after_plan_callback.agent_module.handle_complete(
+          data_after_plan_callback.results,
+          data_after_plan_callback.current_state
+        )
 
-      Enum.empty?(ready_nodes) ->
+        {:next_state, :completed, data_after_plan_callback}
+
+      Enum.empty?(effective_ready_nodes) ->
         {:error,
          Errors.ExecutionError.exception(
            step: :waiting_for_plan,
-           cause: "No nodes are ready to execute"
+           cause: "No nodes are ready to execute after agent's handle_plan"
          )}
-        |> handle_error(data)
+        # Use data with state updated by handle_plan
+        |> handle_error(data_after_plan_callback)
 
       true ->
-        nodes_to_execute =
-          Enum.map(ready_nodes, fn node_name ->
-            node = Map.get(data.dag.nodes, node_name)
+        nodes_to_execute_definitions =
+          Enum.map(effective_ready_nodes, fn node_name ->
+            node_def = Map.get(data_after_plan_callback.dag.nodes, node_name)
 
+            # Prepare context for the stage, including the latest agent state and module
             node_context =
-              Map.merge(data.initial_state, %{
-                dependency_results: data.results,
-                global_input: data.global_input
+              Map.merge(data_after_plan_callback.initial_state, %{
+                dependency_results: data_after_plan_callback.results,
+                global_input: data_after_plan_callback.global_input,
+                agent_module: data_after_plan_callback.agent_module,
+                current_agent_state: data_after_plan_callback.current_state
               })
 
-            {node_name, node, node_context}
+            {node_name, node_def, node_context}
           end)
 
-        {:next_state, :execute_nodes, %__MODULE__{data | nodes_to_execute: nodes_to_execute},
-         [{:next_event, :internal, :execute}]}
+        next_data_state = %{
+          data_after_plan_callback
+          | nodes_to_execute: nodes_to_execute_definitions
+        }
+
+        {:next_state, :execute_nodes, next_data_state, [{:next_event, :internal, :execute}]}
     end
   end
 
@@ -128,33 +174,206 @@ defmodule BeamMePrompty.Agent.Internals do
 
   def execute_nodes(:internal, :execute, data) do
     if Enum.empty?(data.nodes_to_execute) do
-      # This case should ideally not be hit if waiting_for_plan ensures nodes_to_execute is populated
-      # before transitioning here with an :execute event.
-      # However, as a safeguard, transition back to planning.
       {:next_state, :waiting_for_plan, data, [{:next_event, :internal, :plan}]}
     else
-      current_batch_details =
-        Enum.into(data.nodes_to_execute, %{}, fn {name, nd_def, nd_ctx} ->
-          {name, {nd_def, nd_ctx}}
+      # data.nodes_to_execute is [{node_name, node_def, node_ctx_with_agent_state}]
+
+      # Call agent's handle_batch_start
+      {batch_start_status, new_agent_state_after_batch_start} =
+        data.agent_module.handle_batch_start(data.nodes_to_execute, data.current_state)
+
+      current_agent_state_after_batch_start_cb =
+        case batch_start_status do
+          :ok -> new_agent_state_after_batch_start
+          # Keep old state on error from callback
+          _ -> data.current_state
+        end
+
+      data_after_batch_start_cb = %{
+        data
+        | current_state: current_agent_state_after_batch_start_cb
+      }
+
+      # Prepare details for error handling and store current batch info
+      # The node_ctx within nodes_to_execute needs to reflect the latest agent_state for the stage
+      nodes_for_execution_with_updated_ctx =
+        Enum.map(data_after_batch_start_cb.nodes_to_execute, fn {name, nd_def, nd_ctx} ->
+          updated_nd_ctx =
+            Map.put(nd_ctx, :current_agent_state, data_after_batch_start_cb.current_state)
+
+          # agent_module should already be in nd_ctx from waiting_for_plan
+          {name, nd_def, updated_nd_ctx}
         end)
 
-      Enum.each(data.nodes_to_execute, fn {node_name, node_def, node_ctx} ->
-        stage_pid = Map.get(data.stage_workers, node_name)
-        GenStateMachine.cast(stage_pid, {:execute, node_name, node_def, node_ctx, self()})
+      current_batch_details_map =
+        Enum.into(nodes_for_execution_with_updated_ctx, %{}, fn {name, nd_def, updated_nd_ctx} ->
+          {name, {nd_def, updated_nd_ctx}}
+        end)
+
+      Enum.each(nodes_for_execution_with_updated_ctx, fn {node_name, node_def, updated_node_ctx} ->
+        stage_pid = Map.get(data_after_batch_start_cb.stage_workers, node_name)
+        GenStateMachine.cast(stage_pid, {:execute, node_name, node_def, updated_node_ctx, self()})
       end)
 
-      pending_node_names = Enum.map(data.nodes_to_execute, fn {name, _, _} -> name end)
+      pending_node_names =
+        Enum.map(nodes_for_execution_with_updated_ctx, fn {name, _, _} -> name end)
 
-      new_data = %{
-        data
-        | nodes_to_execute: [],
+      final_data_for_state_transition = %{
+        data_after_batch_start_cb
+        | # Clear as they are now dispatched
+          nodes_to_execute: [],
           pending_nodes: pending_node_names,
-          current_batch_details: current_batch_details,
+          current_batch_details: current_batch_details_map,
           temp_batch_results: %{}
       }
 
-      {:next_state, :awaiting_stage_results, new_data}
+      {:next_state, :awaiting_stage_results, final_data_for_state_transition}
     end
+  end
+
+  # Expect agent_state_from_stage in the message
+  def awaiting_stage_results(
+        :info,
+        {:stage_response, node_name, {:ok, stage_result}, agent_state_from_stage},
+        data
+      ) do
+    # Update current_state with the state returned from the stage
+    data_with_stage_agent_state = %{data | current_state: agent_state_from_stage}
+
+    # Call agent's handle_stage_finish
+    # handle_stage_finish(stage_def :: map(), result :: map(), inner_state :: map()) :: :ok
+    {stage_node_definition, _node_ctx} =
+      Map.get(data_with_stage_agent_state.current_batch_details, node_name)
+
+    # handle_stage_finish is for side effects or logging; its return value (:ok) doesn't change agent state here
+    data_with_stage_agent_state.agent_module.handle_stage_finish(
+      stage_node_definition,
+      stage_result,
+      data_with_stage_agent_state.current_state
+    )
+
+    updated_temp_batch_results =
+      Map.put(data_with_stage_agent_state.temp_batch_results, node_name, stage_result)
+
+    updated_pending_nodes_in_batch =
+      List.delete(data_with_stage_agent_state.pending_nodes, node_name)
+
+    # Call agent's handle_progress
+    total_dag_nodes_count = map_size(data_with_stage_agent_state.dag.nodes)
+
+    # Completed nodes are those in main results + the one just finished (Map.put handles overwrite)
+    dag_results_after_current_stage =
+      Map.put(data_with_stage_agent_state.results, node_name, stage_result)
+
+    current_completed_dag_nodes_count = map_size(dag_results_after_current_stage)
+
+    progress_info = %{
+      completed: current_completed_dag_nodes_count,
+      total: total_dag_nodes_count,
+      elapsed_ms: System.monotonic_time(:millisecond) - data_with_stage_agent_state.started_at
+    }
+
+    {progress_status, new_agent_state_after_progress_cb} =
+      data_with_stage_agent_state.agent_module.handle_progress(
+        progress_info,
+        data_with_stage_agent_state.current_state
+      )
+
+    current_agent_state_after_progress =
+      case progress_status do
+        :ok -> new_agent_state_after_progress_cb
+        # Keep state from before progress cb on error
+        _ -> data_with_stage_agent_state.current_state
+      end
+
+    data_after_progress_cb = %{
+      data_with_stage_agent_state
+      | temp_batch_results: updated_temp_batch_results,
+        pending_nodes: updated_pending_nodes_in_batch,
+        current_state: current_agent_state_after_progress
+    }
+
+    # Current Batch Complete
+    # More nodes still pending in the current batch
+    if Enum.empty?(updated_pending_nodes_in_batch) do
+      final_dag_results =
+        Map.merge(data_after_progress_cb.results, data_after_progress_cb.temp_batch_results)
+
+      all_dag_node_names = Map.keys(data_after_progress_cb.dag.nodes)
+      completed_dag_node_names = Map.keys(final_dag_results)
+      pending_dag_nodes_list = all_dag_node_names -- completed_dag_node_names
+
+      # Call agent's handle_batch_complete
+      {batch_complete_status, new_agent_state_after_batch_complete_cb} =
+        data_after_progress_cb.agent_module.handle_batch_complete(
+          # Results of the just-completed batch
+          data_after_progress_cb.temp_batch_results,
+          # All nodes still pending in the entire DAG
+          pending_dag_nodes_list,
+          data_after_progress_cb.current_state
+        )
+
+      current_agent_state_after_batch_complete =
+        case batch_complete_status do
+          :ok -> new_agent_state_after_batch_complete_cb
+          # Keep state from before batch_complete cb on error
+          _ -> data_after_progress_cb.current_state
+        end
+
+      data_for_next_plan = %{
+        data_after_progress_cb
+        | # Commit batch results to main DAG results
+          results: final_dag_results,
+          # Reset for next batch
+          temp_batch_results: %{},
+          # Reset for next batch
+          current_batch_details: %{},
+          current_state: current_agent_state_after_batch_complete
+      }
+
+      {:next_state, :waiting_for_plan, data_for_next_plan, [{:next_event, :internal, :plan}]}
+    else
+      {:keep_state, data_after_progress_cb}
+    end
+  end
+
+  def awaiting_stage_results(
+        :info,
+        {:stage_response, node_name, {:error, reason_of_error}, agent_state_from_stage},
+        data
+      ) do
+    # Update current_state with the state returned from the stage, even on error
+    data_with_stage_agent_state = %{data | current_state: agent_state_from_stage}
+
+    # Retrieve stage definition for context if needed by error reporting
+    # {stage_node_def, node_ctx} = Map.get(data_with_stage_agent_state.current_batch_details, node_name)
+
+    # Construct a structured error for the agent's handle_error callback
+    stage_execution_error =
+      Errors.StageExecutionError.exception(
+        stage: node_name,
+        cause: reason_of_error
+        # Consider if node_ctx should be part of the error; might contain sensitive data.
+      )
+
+    # Prepare data for the main handle_error function.
+    # This ensures the agent's handle_error callback receives the most recent agent state.
+    data_for_error_handling_cb = %{
+      data_with_stage_agent_state
+      | # Clear partial batch results as this batch errored
+        temp_batch_results: %{},
+        # Clear pending nodes for this batch
+        pending_nodes: [],
+        # Clear current batch details
+        current_batch_details: %{}
+    }
+
+    # The private handle_error/2 function will call the agent's handle_error callback
+    handle_error({:error, stage_execution_error}, data_for_error_handling_cb)
+  end
+
+  def awaiting_stage_results({:call, from}, :get_results, data) do
+    {:keep_state, data, [{:reply, from, {:ok, :waiting_for_stage_results}}]}
   end
 
   def awaiting_stage_results(:info, {:stage_response, node_name, {:ok, stage_result}}, data) do
@@ -197,10 +416,6 @@ defmodule BeamMePrompty.Agent.Internals do
     handle_error({:error, error_info_tuple}, data_for_error_handling)
   end
 
-  def awaiting_stage_results({:call, from}, :get_results, data) do
-    {:keep_state, data, [{:reply, from, {:ok, :waiting_for_stage_results}}]}
-  end
-
   def awaiting_stage_results(event_type, event_content, _data) do
     Logger.warning(
       "Unexpected event in awaiting_stage_results: #{inspect(event_type)} - #{inspect(event_content)}"
@@ -217,16 +432,15 @@ defmodule BeamMePrompty.Agent.Internals do
     result = Map.get(data.results, node_name)
 
     case result do
-      nil ->
-        {:keep_state, data, [{:reply, from, {:error, :node_not_found}}]}
-
-      _ ->
-        {:keep_state, data, [{:reply, from, {:ok, :completed, result}}]}
+      nil -> {:keep_state, data, [{:reply, from, {:error, :node_not_found}}]}
+      _ -> {:keep_state, data, [{:reply, from, {:ok, :completed, result}}]}
     end
   end
 
   def completed(:info, :cleanup, data) do
-    if Process.alive?(data.stages_supervisor_pid) do
+    # This :cleanup event is an internal signal if we decide to use it before termination.
+    # Actual agent's handle_cleanup is called in GenStateMachine.terminate/3.
+    if data.stages_supervisor_pid && Process.alive?(data.stages_supervisor_pid) do
       DynamicSupervisor.stop(data.stages_supervisor_pid)
     end
 
@@ -241,14 +455,74 @@ defmodule BeamMePrompty.Agent.Internals do
     {:keep_state, data}
   end
 
-  defp handle_error({:error, error}, data) do
-    error
-    |> Errors.to_class()
-    |> data.module.handle_error(data.current_state)
-    |> handle_error_callback(data)
+  # This is called by GenStateMachine on exit/termination
+  @impl true
+  def terminate(reason, _state_name, data) do
+    execution_status =
+      case reason do
+        :normal -> :completed
+        # Assuming :shutdown implies graceful completion
+        :shutdown -> :completed
+        # More explicit shutdown completion
+        {:shutdown, :completed} -> :completed
+        # All other reasons imply an error state
+        _ -> :error
+      end
+
+    # Call agent's handle_cleanup callback
+    # Ensure agent_module was initialized
+    if data.agent_module do
+      data.agent_module.handle_cleanup(execution_status, data.current_state)
+    end
+
+    # Ensure supervisor is stopped if it was started and is still alive
+    if data.stages_supervisor_pid && Process.alive?(data.stages_supervisor_pid) do
+      DynamicSupervisor.stop(data.stages_supervisor_pid)
+    end
+
+    :ok
   end
 
-  defp handle_error_callback({:stop, reason}, data) do
-    {:stop, reason, data}
+  defp handle_error({:error, error_detail}, data) do
+    error_class_module = Errors.to_class(error_detail)
+
+    # Call agent's handle_error callback
+    agent_error_response = data.agent_module.handle_error(error_class_module, data.current_state)
+
+    # Process the agent's decision from its handle_error callback
+    case agent_error_response do
+      {:retry, new_agent_state_for_retry} ->
+        Logger.info("Agent requested retry. Transitioning to waiting_for_plan with new state.")
+        # Reset parts of the state for a clean retry from planning
+        data_for_retry = %{
+          data
+          | current_state: new_agent_state_for_retry,
+            pending_nodes: [],
+            nodes_to_execute: [],
+            temp_batch_results: %{},
+            current_batch_details: %{}
+        }
+
+        {:next_state, :waiting_for_plan, data_for_retry, [{:next_event, :internal, :plan}]}
+
+      {:stop, stop_reason} ->
+        {:stop, {:agent_stopped_execution, stop_reason}, data}
+
+      {:restart, restart_reason} ->
+        # A true restart of the GenStateMachine is usually handled by a supervisor.
+        # For now, this will be treated as a stop with a specific reason.
+        Logger.warning(
+          "Agent requested restart with reason: #{inspect(restart_reason)}. Currently handled as stop."
+        )
+
+        {:stop, {:agent_requested_restart_as_stop, restart_reason}, data}
+
+      unexpected_response ->
+        Logger.error(
+          "Unexpected response from agent's handle_error: #{inspect(unexpected_response)}. Stopping."
+        )
+
+        {:stop, {:unexpected_handle_error_response, unexpected_response}, data}
+    end
   end
 end

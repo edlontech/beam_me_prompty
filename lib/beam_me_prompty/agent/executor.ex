@@ -10,10 +10,21 @@ defmodule BeamMePrompty.Agent.Executor do
 
   When using this module, you can implement the required callbacks:
 
+    * `handle_init/2` - Called when the agent is initialized with its DAG
     * `handle_error/2` - Called when errors occur during execution
+    * `handle_plan/2` - Called during planning phase when determining ready nodes
+    * `handle_batch_start/2` - Called when a batch of nodes is about to be executed
     * `handle_stage_start/2` - Called when a stage begins execution
     * `handle_stage_finish/3` - Called when a stage completes execution
+    * `handle_batch_complete/3` - Called when a batch of nodes completes execution
+    * `handle_tool_call/3` - Called when an LLM invokes a tool
+    * `handle_tool_result/3` - Called after a tool execution completes
+    * `handle_progress/2` - Periodically called to report execution progress
     * `handle_complete/2` - Called when all stages complete
+    * `handle_cleanup/2` - Called during termination to ensure resource cleanup
+    * `handle_timeout/2` - Called when execution times out
+    * `handle_pause/2` - Called when execution is paused
+    * `handle_resume/2` - Called when execution is resumed
   """
 
   alias BeamMePrompty.DAG
@@ -27,19 +38,60 @@ defmodule BeamMePrompty.Agent.Executor do
           | {:stop, cause :: term()}
           | {:restart, reason :: term()}
 
+  @callback handle_init(dag :: DAG.t(), inner_state :: map()) :: {:ok, map()} | {:error, term()}
+
   @callback handle_error(Errors.class_module(), inner_state :: map()) :: handle_error_response
+
+  @callback handle_plan(ready_nodes :: [atom()], inner_state :: map()) ::
+              {:ok, [atom()], map()} | {:error, term()}
+
+  @callback handle_batch_start(nodes_to_execute :: [{atom(), map(), map()}], inner_state :: map()) ::
+              {:ok, map()} | {:error, term()}
 
   @callback handle_stage_start(stage :: map(), inner_state :: map()) :: :ok
 
   @callback handle_stage_finish(stage :: map(), result :: map(), inner_state :: map()) :: :ok
 
+  @callback handle_batch_complete(
+              batch_results :: map(),
+              pending_nodes :: [atom()],
+              inner_state :: map()
+            ) ::
+              {:ok, map()} | {:error, term()}
+
+  @callback handle_tool_call(tool_name :: atom(), tool_args :: map(), inner_state :: map()) ::
+              {:ok, map()} | {:error, term()}
+
+  @callback handle_tool_result(tool_name :: atom(), result :: term(), inner_state :: map()) ::
+              {:ok, map()} | {:error, term()}
+
+  @callback handle_progress(
+              progress :: %{completed: integer(), total: integer(), elapsed_ms: integer()},
+              inner_state :: map()
+            ) ::
+              {:ok, map()}
+
   @callback handle_complete(results :: map(), inner_state :: map()) :: :ok
+
+  @callback handle_cleanup(execution_status :: :completed | :error, inner_state :: map()) :: :ok
+
+  @callback handle_timeout(timeout_type :: :execution | :stage | :tool, inner_state :: map()) ::
+              handle_error_response()
+
+  @callback handle_pause(reason :: term(), inner_state :: map()) ::
+              {:ok, map()} | {:error, term()}
+
+  @callback handle_resume(inner_state :: map()) ::
+              {:ok, map()} | {:error, term()}
 
   defmacro __using__(_opts) do
     quote location: :keep do
       @behaviour BeamMePrompty.Agent.Executor
 
       alias BeamMePrompty.Errors.External, as: ExternalError
+
+      @doc false
+      def handle_init(_dag, state), do: {:ok, state}
 
       @doc false
       def handle_error({error, reason}, state)
@@ -49,18 +101,59 @@ defmodule BeamMePrompty.Agent.Executor do
       def handle_error(error, _state), do: {:stop, error}
 
       @doc false
+      def handle_plan(ready_nodes, state), do: {:ok, ready_nodes, state}
+
+      @doc false
+      def handle_batch_start(_nodes_to_execute, state), do: {:ok, state}
+
+      @doc false
       def handle_stage_start(_stage, _state), do: :ok
 
       @doc false
       def handle_stage_finish(_stage, _result, _state), do: :ok
 
       @doc false
+      def handle_batch_complete(_batch_results, _pending_nodes, state), do: {:ok, state}
+
+      @doc false
+      def handle_tool_call(_tool_name, _tool_args, state), do: {:ok, state}
+
+      @doc false
+      def handle_tool_result(_tool_name, _result, state), do: {:ok, state}
+
+      @doc false
+      def handle_progress(_progress, state), do: {:ok, state}
+
+      @doc false
       def handle_complete(_results, _state), do: :ok
 
-      defoverridable handle_error: 2,
+      @doc false
+      def handle_cleanup(_execution_status, _state), do: :ok
+
+      @doc false
+      def handle_timeout(_timeout_type, state), do: {:stop, :timeout}
+
+      @doc false
+      def handle_pause(_reason, state), do: {:ok, state}
+
+      @doc false
+      def handle_resume(state), do: {:ok, state}
+
+      defoverridable handle_init: 2,
+                     handle_error: 2,
+                     handle_plan: 2,
+                     handle_batch_start: 2,
                      handle_stage_start: 2,
                      handle_stage_finish: 3,
-                     handle_complete: 2
+                     handle_batch_complete: 3,
+                     handle_tool_call: 3,
+                     handle_tool_result: 3,
+                     handle_progress: 2,
+                     handle_complete: 2,
+                     handle_cleanup: 2,
+                     handle_timeout: 2,
+                     handle_pause: 2,
+                     handle_resume: 1
     end
   end
 
