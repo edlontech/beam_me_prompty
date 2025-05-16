@@ -96,7 +96,7 @@ defmodule BeamMePrompty.Agent.Executor do
       @doc false
       def handle_error({error, reason}, state)
           when is_exception(error, ExternalError),
-          do: {:retry, reason, state}
+          do: {:retry, state}
 
       def handle_error(error, _state), do: {:stop, error}
 

@@ -440,8 +440,6 @@ defmodule BeamMePrompty.Agent.Internals do
 
     case agent_error_response do
       {:retry, new_agent_state_for_retry} ->
-        Logger.info("Agent requested retry. Transitioning to waiting_for_plan with new state.")
-        # Reset parts of the state for a clean retry from planning
         data_for_retry = %{
           data
           | current_state: new_agent_state_for_retry,
@@ -457,7 +455,7 @@ defmodule BeamMePrompty.Agent.Internals do
         {:stop, {:agent_stopped_execution, stop_reason}, data}
 
       {:restart, restart_reason} ->
-        {:stop, {:agent_requested_restart_as_stop, restart_reason}, data}
+        {:stop, {:restart_requested, restart_reason}, data}
 
       unexpected_response ->
         Logger.error(
