@@ -69,9 +69,9 @@ defmodule BeamMePrompty.LLM.AnthropicOpts do
               doc: "Which model to use",
               default: "claude-3-7-sonnet-20250219"
             ],
-            plug: [
-              type: {:tuple, [:atom, :atom]},
-              doc: "Plugins to use for the request. This is useful for testing."
+            http_adapter: [
+              type: :any,
+              doc: "An HTTP client adapter to use for the request. Defaults to Req."
             ],
             tools: [
               type: :non_empty_keyword_list,
@@ -86,21 +86,24 @@ defmodule BeamMePrompty.LLM.AnthropicOpts do
   """
   @type t() :: [unquote(NimbleOptions.option_typespec(@schema))]
 
+  alias BeamMePrompty.Agent.Dsl.LLMParams
   alias BeamMePrompty.LLM.Errors.InvalidConfig
 
   @spec validate(String.t(), any(), LLMParams.t()) ::
-          {:ok, t()} | {:error, InvalidConfig.t()}
+          {:ok, t()} | {:error, Splode.Error.t()}
   def validate(model, tools, config) do
     config =
       [
-        max_tokens: config.max_tokens,
-        temperature: config.temperature,
-        top_p: config.top_p,
-        top_k: config.top_k,
+        max_tokens: get_in(config, [:max_tokens]),
+        temperature: get_in(config, [:temperature]),
+        top_p: get_in(config, [:top_p]),
+        top_k: get_in(config, [:top_k]),
         key: api_key(config.api_key),
-        thinking_budget: config.thinking_budget,
+        thinking: get_in(config, [:thinking]),
+        thinking_budget: get_in(config, [:thinking_budget]),
         tools: parse_dsl_tools(tools),
-        model: model
+        model: model,
+        http_adapter: get_in(config, [:http_adapter])
       ]
       |> Keyword.reject(fn {_, v} -> is_nil(v) end)
 
@@ -109,7 +112,7 @@ defmodule BeamMePrompty.LLM.AnthropicOpts do
         {:ok, parsed_config}
 
       {:error, error} ->
-        {:error, InvalidConfig.exception(%{module: __MODULE__, cause: error.message})}
+        {:error, InvalidConfig.exception(module: __MODULE__, cause: error.message)}
     end
   end
 

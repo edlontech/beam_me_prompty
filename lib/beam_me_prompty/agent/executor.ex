@@ -38,7 +38,7 @@ defmodule BeamMePrompty.Agent.Executor do
           | {:stop, cause :: term()}
           | {:restart, reason :: term()}
 
-  @callback handle_init(dag :: DAG.t(), inner_state :: map()) :: {:ok, map()} | {:error, term()}
+  @callback handle_init(dag :: DAG.dag(), inner_state :: map()) :: {:ok, map()} | {:error, term()}
 
   @callback handle_error(Errors.class_module(), inner_state :: map()) :: handle_error_response
 

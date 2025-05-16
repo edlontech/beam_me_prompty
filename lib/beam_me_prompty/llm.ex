@@ -6,8 +6,9 @@ defmodule BeamMePrompty.LLM do
   with different LLM providers (e.g., OpenAI, Google Gemini, local models).
   """
 
-  alias BeamMePrompty.Agent.Dsl.Part
   alias BeamMePrompty.Agent.Dsl.LLMParams
+  alias BeamMePrompty.Agent.Dsl.Part
+  alias BeamMePrompty.Agent.Dsl.Tool
 
   @type roles :: :system | :user | :assistant
 
@@ -42,7 +43,7 @@ defmodule BeamMePrompty.LLM do
   @callback completion(
               model :: String.t(),
               messages :: [message()],
-              tools :: [any()],
+              tools :: [Tool.t()],
               opts :: completion_opts()
             ) ::
               {:ok, response} | {:error, any()}

@@ -136,13 +136,11 @@ defmodule BeamMePrompty.LLM.Anthropic do
   end
 
   defp parse_response({:ok, %Req.Response{status: status, body: body}})
-       when status in [400..499] do
-    {:error, InvalidRequest.exception(module: __MODULE__, cause: body)}
-  end
+       when status in 400..499,
+       do: {:error, InvalidRequest.exception(module: __MODULE__, cause: body)}
 
-  defp parse_response({:ok, %Req.Response{status: 500, body: body}}) do
-    {:error, UnexpectedLLMResponse.exception(module: __MODULE__, status: 500, cause: body)}
-  end
+  defp parse_response({:ok, %Req.Response{status: 500, body: body}}),
+    do: {:error, UnexpectedLLMResponse.exception(module: __MODULE__, status: 500, cause: body)}
 
   defp tool_choice(nil), do: %{}
 
@@ -181,9 +179,7 @@ defmodule BeamMePrompty.LLM.Anthropic do
     }
   end
 
-  defp parse_content(content) do
-    content
-  end
+  defp parse_content(content), do: content
 
   defp client(opts) do
     Req.new(
@@ -192,7 +188,11 @@ defmodule BeamMePrompty.LLM.Anthropic do
         :"x-api-key" => opts[:key],
         :"anthropic-version" => opts[:version]
       },
-      plug: opts[:plug]
+      plug:
+        case opts[:http_adapter] do
+          nil -> nil
+          adapter -> {adapter, __MODULE__}
+        end
     )
   end
 
@@ -262,7 +262,6 @@ defmodule BeamMePrompty.LLM.Anthropic do
         s -> s
       end
 
-    # Group messages by role, preserving order
     messages_list =
       keyword_messages
       |> Enum.reject(fn {k, _v} -> k == :system end)
@@ -277,7 +276,6 @@ defmodule BeamMePrompty.LLM.Anthropic do
         if is_nil(api_role) do
           []
         else
-          # Handle message parts
           format_role_messages(api_role, parts)
         end
       end)
@@ -291,9 +289,7 @@ defmodule BeamMePrompty.LLM.Anthropic do
     end
   end
 
-  # Helper to format messages for a specific role
   defp format_role_messages(role, parts) when is_list(parts) do
-    # Flatten nested lists while preserving order
     formatted_parts =
       Enum.flat_map(parts, fn
         parts_list when is_list(parts_list) ->

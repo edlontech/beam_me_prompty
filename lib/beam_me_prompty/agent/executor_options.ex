@@ -52,7 +52,7 @@ defmodule BeamMePrompty.Agent.ExecutorOptions do
         {:ok, parsed_config}
 
       {:error, error} ->
-        {:error, InvalidConfig.exception(%{module: __MODULE__, cause: error.message})}
+        {:error, InvalidConfig.exception(module: __MODULE__, cause: error.message)}
     end
   end
 end

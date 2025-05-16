@@ -70,8 +70,8 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
   alias BeamMePrompty.LLM.Errors.InvalidConfig
   alias BeamMePrompty.Agent.Dsl.{LLMParams, Tool}
 
-  @spec validate(String.t(), Tool.t(), LLMParams.t()) ::
-          {:ok, t()} | {:error, InvalidConfig.t()}
+  @spec validate(String.t(), [Tool.t()], LLMParams.t()) ::
+          {:ok, t()} | {:error, Splode.Error.t()}
   def validate(model, tools, config) do
     config =
       [
@@ -96,7 +96,7 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
         {:ok, parsed_config}
 
       {:error, error} ->
-        {:error, InvalidConfig.exception(%{module: __MODULE__, cause: error.message})}
+        {:error, InvalidConfig.exception(module: __MODULE__, cause: error.message)}
     end
   end
 

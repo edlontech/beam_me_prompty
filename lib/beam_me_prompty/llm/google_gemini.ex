@@ -165,22 +165,17 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
     |> parse_response()
   end
 
-  defp parse_response({:ok, %Req.Response{status: 200, body: body}}) do
-    get_candidate(body)
-  end
+  defp parse_response({:ok, %Req.Response{status: 200, body: body}}), do: get_candidate(body)
 
   defp parse_response({:ok, %Req.Response{status: status, body: body}})
-       when status in [400..499] do
-    {:error, InvalidRequest.exception(module: __MODULE__, cause: body)}
-  end
+       when status in 400..499,
+       do: {:error, InvalidRequest.exception(module: __MODULE__, cause: body)}
 
-  defp parse_response({:ok, %Req.Response{status: 500, body: body}}) do
-    {:error, UnexpectedLLMResponse.exception(module: __MODULE__, status: 500, cause: body)}
-  end
+  defp parse_response({:ok, %Req.Response{status: 500, body: body}}),
+    do: {:error, UnexpectedLLMResponse.exception(module: __MODULE__, status: 500, cause: body)}
 
-  defp get_candidate_content(%{"text" => text_content}) when is_binary(text_content) do
-    {:ok, text_content}
-  end
+  defp get_candidate_content(%{"text" => text_content}) when is_binary(text_content),
+    do: {:ok, text_content}
 
   defp get_candidate_content(%{
          "functionCall" => %{
