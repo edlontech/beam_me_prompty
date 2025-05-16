@@ -1,8 +1,10 @@
 defmodule BeamMePrompty.LLM.GoogleGeminiTest do
   use ExUnit.Case, async: true
 
-  alias BeamMePrompty.LLM.GoogleGemini
+  import BeamMePrompty.Agent.Dsl.Part, only: [text_part: 1]
+
   alias BeamMePrompty.Fixtures.GoogleGemini, as: GeminiFixtures
+  alias BeamMePrompty.LLM.GoogleGemini
 
   describe "completion/3" do
     test "should return a valid completion response" do
@@ -12,10 +14,14 @@ defmodule BeamMePrompty.LLM.GoogleGeminiTest do
 
       assert {:ok, response} =
                GoogleGemini.completion(
-                 [{:system, "You are a funny writter"}, "Tell me a joke"],
+                 "gemini-2.0-flash",
+                 [
+                   {:system, [text_part("You are a funny writter")]},
+                   {:user, [text_part("Tell me a joke")]}
+                 ],
+                 [],
                  key: "FAKE_KEY",
-                 model: "gemini-2.0-flash",
-                 plug: {Req.Test, GoogleGemini}
+                 http_adapter: Req.Test
                )
 
       assert response =~ "Why don't scientists trust atoms?"

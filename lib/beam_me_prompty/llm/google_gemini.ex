@@ -235,7 +235,11 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
       params: [key: opts[:key]],
       path_params: [model: opts[:model]],
       path_params_style: :curly,
-      plug: opts[:plug]
+      plug:
+        case opts[:http_adapter] do
+          nil -> nil
+          adapter -> {adapter, __MODULE__}
+        end
     )
   end
 

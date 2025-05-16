@@ -60,7 +60,7 @@ defmodule BeamMePrompty.Agent.Dsl do
   typedstruct module: FunctionResultPart do
     @moduledoc false
     field :id, String.t() | nil
-    field :name, String.t()
+    field :name, String.t() | atom()
     field :result, any()
   end
 
@@ -104,8 +104,8 @@ defmodule BeamMePrompty.Agent.Dsl do
     field :frequency_penalty, float() | nil
     field :presence_penalty, float() | nil
     field :thinking_budget, integer() | nil
-    field :structured_response, OpenApiSpex.Schema.t() | nil
-    field :api_key, String.t() | nil
+    field :structured_response, OpenApiSpex.Schema.t() | map() | nil
+    field :api_key, String.t() | function() | nil
     field :other_params, map() | nil
   end
 
@@ -159,6 +159,9 @@ defmodule BeamMePrompty.Agent.Dsl do
     args: [:role, :content],
     describe: "Defines a message in the stage.",
     target: Message,
+    imports: [
+      BeamMePrompty.Agent.Dsl.Part
+    ],
     schema: [
       role: [
         type: :atom,
@@ -285,4 +288,56 @@ defmodule BeamMePrompty.Agent.Dsl do
       BeamMePrompty.Agent.Dsl.Verifiers.HasStages,
       BeamMePrompty.Agent.Dsl.Verifiers.StagesAreValid
     ]
+
+  defmodule Part do
+    @moduledoc """
+    Helpers for creating different parts of messages in the DSL.
+    """
+
+    @type parts() ::
+            TextPart.t()
+            | FilePart.t()
+            | DataPart.t()
+            | FunctionResultPart.t()
+            | FunctionCallPart.t()
+
+    @spec text_part(String.t()) :: TextPart.t()
+    def text_part(text) do
+      %TextPart{
+        type: :text,
+        text: text
+      }
+    end
+
+    @spec data_part(map()) :: DataPart.t()
+    def data_part(data) do
+      %DataPart{
+        type: :data,
+        data: data
+      }
+    end
+
+    @spec file_part(%{
+            required(:name) => String.t(),
+            required(:mime_type) => String.t(),
+            optional(:bytes) => binary(),
+            optional(:uri) => String.t()
+          }) :: FilePart.t()
+    def file_part(%{
+          name: name,
+          mime_type: mime_type,
+          bytes: bytes,
+          uri: uri
+        }) do
+      %FilePart{
+        type: :file,
+        file: %{
+          name: name,
+          mime_type: mime_type,
+          bytes: bytes,
+          uri: uri
+        }
+      }
+    end
+  end
 end

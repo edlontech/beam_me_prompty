@@ -50,9 +50,9 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
               The maximum number of tokens to use for the thinking budget. Minimum of 1024 tokens.
               """
             ],
-            plug: [
-              type: {:tuple, [:atom, :atom]},
-              doc: "Plugins to use for the request. This is useful for testing."
+            http_adapter: [
+              type: :any,
+              doc: "An HTTP client adapter to use for the request. Defaults to Req."
             ],
             tools: [
               type: :non_empty_keyword_list,
@@ -75,15 +75,19 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
   def validate(model, tools, config) do
     config =
       [
-        max_output_tokens: config.max_tokens,
-        temperature: config.temperature,
-        top_p: config.top_p,
-        top_k: config.top_k,
-        key: api_key(config.api_key),
-        response_schema: config.structured_response,
-        thinking_budget: config.thinking_budget,
+        max_output_tokens: get_in(config, [:max_tokens]),
+        temperature: get_in(config, [:temperature]),
+        top_p: get_in(config, [:top_p]),
+        top_k: get_in(config, [:top_k]),
+        key:
+          config
+          |> get_in([:key])
+          |> api_key(),
+        response_schema: get_in(config, [:response_schema]),
+        thinking_budget: get_in(config, [:thinking_budget]),
         tools: parse_dsl_tools(tools),
-        model: model
+        model: model,
+        http_adapter: get_in(config, [:http_adapter])
       ]
       |> Keyword.reject(fn {_, v} -> is_nil(v) end)
 

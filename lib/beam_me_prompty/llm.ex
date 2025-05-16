@@ -6,20 +6,23 @@ defmodule BeamMePrompty.LLM do
   with different LLM providers (e.g., OpenAI, Google Gemini, local models).
   """
 
+  alias BeamMePrompty.Agent.Dsl.Part
+  alias BeamMePrompty.Agent.Dsl.LLMParams
+
   @type roles :: :system | :user | :assistant
 
   @typedoc "Represents a message in a conversation history."
-  @type message :: binary() | {roles(), binary() | map()}
+  @type message :: {roles(), [Part.parts()]}
 
   @typedoc "Represents the response from an LLM provider."
   @type response :: binary() | function_call_request() | map()
 
   @typedoc "Options passed to the completion function."
-  @type completion_opts :: keyword()
+  @type completion_opts :: LLMParams.t() | keyword()
 
   @typedoc "Request from the LLM to execute a function."
   @type function_call_request :: %{
-          functionCall: %{
+          function_call: %{
             optional(:id) => String.t(),
             optional(:name) => String.t(),
             optional(:arguments) => map()

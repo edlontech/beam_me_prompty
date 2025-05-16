@@ -2,8 +2,6 @@ defmodule BeamMePrompty.TestAgent do
   @moduledoc false
   use BeamMePrompty.Agent
 
-  alias BeamMePrompty.Agent.Dsl.TextPart
-
   agent do
     stage :first_stage do
       llm "test-model", BeamMePrompty.FakeLlmClient do
@@ -15,15 +13,17 @@ defmodule BeamMePrompty.TestAgent do
           api_key fn -> System.get_env("TEST_API_KEY") end
         end
 
-        message :system, [%TextPart{type: :text, text: "You are a helpful assistant."}]
-        message :user, [%TextPart{type: :text, text: "Wat dis {{text}}"}]
+        message :system, [text_part("You are a helpful assistant.")]
+        message :user, [text_part("Wat dis {{text}}")]
       end
     end
 
     stage :second_stage do
+      depends_on [:first_stage]
+
       llm "test-model", BeamMePrompty.FakeLlmClient do
-        message :system, [%TextPart{type: :text, text: "You are a helpful assistant."}]
-        message :user, [%TextPart{type: :text, text: "Call the TestTool"}]
+        message :system, [text_part("You are a helpful assistant.")]
+        message :user, [text_part("Call the TestTool")]
 
         tool :test_tool do
           description "Test tool description"
@@ -47,11 +47,12 @@ defmodule BeamMePrompty.TestAgent do
     end
 
     stage :third_stage do
-      depends_on [:first_stage, :second_stage]
+      depends_on [:second_stage]
 
       llm "test-model", BeamMePrompty.FakeLlmClient do
-        message :system, [%TextPart{type: :text, text: "You are a helpful assistant."}]
-        message :user, [%TextPart{type: :text, text: "Wat dis {{text}}"}]
+        message :system, [text_part("You are a helpful assistant.")]
+        message :user, [data_part(%{this: "that"})]
+        message :user, [text_part("Result: {{ second_stage }}")]
       end
     end
   end
