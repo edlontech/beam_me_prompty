@@ -134,19 +134,8 @@ defmodule BeamMePrompty.Agent.Stage do
         }
 
         {:error, Errors.to_class(error_reason), updated_stage_data_on_error}
-
-      # Fallback for cases where maybe_call_llm might not return the 4-tuple (e.g., no LLM call paths)
-      # These imply no direct change to agent_state within maybe_call_llm itself for that path.
-      {:ok, llm_result, updated_messages_history} ->
-        updated_stage_data = %{stage_data | messages: updated_messages_history}
-        {:ok, llm_result, updated_stage_data}
-
-      {:error, error_reason} ->
-        {:error, Errors.to_class(error_reason), stage_data}
     end
   end
-
-  # --- Tool Calling Helpers ---
 
   defp function_call_response(%{function_call: %{name: name}} = response) when is_binary(name),
     do: {:tool, response}
@@ -171,7 +160,8 @@ defmodule BeamMePrompty.Agent.Stage do
        )
        when is_map(config) do
     if config.model && config.llm_client do
-      stage_prompt_messages = MessageParser.parse(config.messages, input) || []
+      stage_prompt_messages =
+        if config.messages, do: MessageParser.parse(config.messages, input), else: []
 
       llm_params =
         case config.params do

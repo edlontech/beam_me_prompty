@@ -65,9 +65,6 @@ defmodule BeamMePrompty.Agent.Internals do
               {:ok, stage_pid} ->
                 {node_name, stage_pid}
 
-              {:ok, pid, _extra_info} ->
-                {node_name, pid}
-
               {:error, reason} ->
                 raise "Failed to start stage worker for #{node_name}: #{inspect(reason)}"
             end
