@@ -272,10 +272,10 @@ defmodule BeamMePrompty.Agent.Stage do
 
       {:tool, tool_function_call_part} ->
         function_call_details = tool_function_call_part.function_call
-        tool_name_atom = String.to_existing_atom(function_call_details.name)
+        tool_name = tool_name(function_call_details)
 
         parsed_tool_info = %{
-          tool_name: tool_name_atom,
+          tool_name: tool_name,
           tool_args: function_call_details.arguments,
           tool_call_id: Map.get(function_call_details, :id)
         }
@@ -422,11 +422,16 @@ defmodule BeamMePrompty.Agent.Stage do
   end
 
   defp execute_tool(tool_def, tool_args) do
-    try do
-      apply(tool_def.module, :run, [tool_args])
-    rescue
-      e -> {:error, {e, __STACKTRACE__}}
-    end
+    tool_def.module.run(tool_args)
+  rescue
+    e -> {:error, {e, __STACKTRACE__}}
+  end
+
+  defp tool_name(tool) do
+    String.to_existing_atom(tool.name)
+  rescue
+    _ ->
+      tool.name
   end
 
   defp format_tool_result_message({:ok, result_content}, tool_call_id, tool_name_str) do

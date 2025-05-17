@@ -198,24 +198,33 @@ defmodule BeamMePrompty.Agent.Executor do
       {:ok, results} = BeamMePrompty.Agents.Executor.execute(MyAgent, %{input: "data"})
   """
   def execute(module, input, state, opts, timeout) do
-    case start_link(module, input, state, opts) do
-      {:ok, pid} ->
-        ref = Process.monitor(pid)
+    # Store original trap_exit setting to restore it later
+    previous_trap_exit = Process.flag(:trap_exit, true)
 
-        # Poll for completion with timeout
-        result = poll_for_completion(pid, timeout)
+    try do
+      case start_link(module, input, state, opts) do
+        {:ok, pid} ->
+          # Monitor is still useful for normal termination and error handling
+          ref = Process.monitor(pid)
 
-        # Clean up the monitor
-        Process.demonitor(ref, [:flush])
+          # Wait for completion, handle EXIT signals and monitor messages
+          result = wait_for_completion(pid, ref, timeout)
 
-        # Ensure the process is terminated if it's still alive
-        if Process.alive?(pid), do: Process.exit(pid, :normal)
+          # Clean up the monitor if still needed
+          Process.demonitor(ref, [:flush])
 
-        result
+          # Ensure the process is terminated if it's still alive
+          if Process.alive?(pid), do: Process.exit(pid, :normal)
 
-      {:error, _} = error ->
-        # Failed to start the agent
-        error
+          result
+
+        {:error, _} = error ->
+          # Failed to start the agent
+          error
+      end
+    after
+      # Restore original trap_exit setting
+      Process.flag(:trap_exit, previous_trap_exit)
     end
   end
 
@@ -233,26 +242,49 @@ defmodule BeamMePrompty.Agent.Executor do
     end
   end
 
-  defp poll_for_completion(pid, timeout, interval \\ 100) do
+  # Replace poll_for_completion with wait_for_completion that handles EXIT messages
+  defp wait_for_completion(pid, ref, timeout) do
     end_time = System.monotonic_time(:millisecond) + timeout
 
-    poll_loop(pid, end_time, interval)
+    wait_loop(pid, ref, end_time)
   end
 
-  defp poll_loop(pid, end_time, interval) do
-    case check_completion(pid) do
-      :continue ->
-        current_time = System.monotonic_time(:millisecond)
+  defp wait_loop(pid, ref, end_time) do
+    time_left = end_time - System.monotonic_time(:millisecond)
 
-        if current_time < end_time do
-          Process.sleep(interval)
-          poll_loop(pid, end_time, interval)
-        else
-          {:error, :timeout}
-        end
+    if time_left <= 0 do
+      {:error, :timeout}
+    else
+      receive do
+        # Process terminated normally
+        {:DOWN, ^ref, :process, ^pid, :normal} ->
+          case get_results(pid) do
+            {:ok, :completed, results} -> {:ok, results}
+            _other -> {:error, :abnormal_termination}
+          end
 
-      result ->
-        result
+        # Process crashed with an error
+        {:DOWN, ^ref, :process, ^pid, reason} when reason != :normal ->
+          {:error, reason}
+
+        # EXIT signal from the linked process - normal termination
+        {:EXIT, ^pid, :normal} ->
+          case get_results(pid) do
+            {:ok, :completed, results} -> {:ok, results}
+            _other -> {:error, :incomplete_execution}
+          end
+
+        # EXIT signal with error reason
+        {:EXIT, ^pid, reason} ->
+          {:error, reason}
+      after
+        # Check periodically if we have results but haven't received a message yet
+        min(100, max(0, time_left)) ->
+          case check_completion(pid) do
+            :continue -> wait_loop(pid, ref, end_time)
+            result -> result
+          end
+      end
     end
   end
 
