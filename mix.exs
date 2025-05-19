@@ -9,8 +9,23 @@ defmodule BeamMePrompty.MixProject do
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
+      description: description(),
+      package: package(),
       dialyzer: [
         plt_file: {:no_warn, "priv/plts/project.plt"}
+      ],
+      test_coverage: [tool: ExCoveralls],
+      preferred_cli_env: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test
+      ],
+      source_url: "https://github.com/edlontech/beam_me_prompty",
+      homepage_url: "https://github.com/edlontech/beam_me_prompty",
+      docs: [
+        main: "readme",
+        extras: ["README.md", "LICENSE.md"]
       ]
     ]
   end
@@ -27,6 +42,7 @@ defmodule BeamMePrompty.MixProject do
     [
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:excoveralls, "~> 0.14", only: :test},
       {:gen_state_machine, "~> 3.0"},
       {:hammox, "~> 0.7", only: :test},
       {:mustache, "~> 0.5"},
@@ -34,6 +50,7 @@ defmodule BeamMePrompty.MixProject do
       {:open_api_spex, "~> 3.21"},
       {:plug, "~> 1.7"},
       {:req, "~> 0.5"},
+      {:recode, "~> 0.6", only: :dev, runtime: false},
       {:spark, "~> 2.2.55"},
       {:splode, "~> 0.2"},
       {:typedstruct, "~> 0.5.3"}
@@ -41,5 +58,17 @@ defmodule BeamMePrompty.MixProject do
   end
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
-  defp elixirc_paths(_), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
+
+  defp description() do
+    "BeamMePrompty is an Elixir library for building and executing multi-stage agents against Large Language Models (LLMs). It provides a DSL to define agent stages, manage dependencies, validate inputs/outputs, and plug in custom LLM clients."
+  end
+
+  defp package() do
+    [
+      licenses: ["MIT"],
+      links: %{"GitHub" => "https://github.com/edlontech/beam_me_prompty"},
+      sponsor: "ycastor.eth"
+    ]
+  end
 end

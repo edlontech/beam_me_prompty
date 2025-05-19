@@ -67,8 +67,9 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
   """
   @type t() :: [unquote(NimbleOptions.option_typespec(@schema))]
 
+  alias BeamMePrompty.Agent.Dsl.LLMParams
+  alias BeamMePrompty.Agent.Dsl.Tool
   alias BeamMePrompty.LLM.Errors.InvalidConfig
-  alias BeamMePrompty.Agent.Dsl.{LLMParams, Tool}
 
   @spec validate(String.t(), [Tool.t()], LLMParams.t()) ::
           {:ok, t()} | {:error, Splode.Error.t()}

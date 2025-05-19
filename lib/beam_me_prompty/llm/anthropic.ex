@@ -68,18 +68,16 @@ defmodule BeamMePrompty.LLM.Anthropic do
 
   @behaviour BeamMePrompty.LLM
 
-  alias BeamMePrompty.Agent.Dsl.{
-    TextPart,
-    DataPart,
-    FilePart,
-    FunctionResultPart,
-    FunctionCallPart
-  }
+  alias BeamMePrompty.Agent.Dsl.DataPart
+  alias BeamMePrompty.Agent.Dsl.FilePart
+  alias BeamMePrompty.Agent.Dsl.FunctionCallPart
+  alias BeamMePrompty.Agent.Dsl.FunctionResultPart
+  alias BeamMePrompty.Agent.Dsl.TextPart
 
   alias BeamMePrompty.Errors
+  alias BeamMePrompty.LLM.AnthropicOpts
   alias BeamMePrompty.LLM.Errors.InvalidRequest
   alias BeamMePrompty.LLM.Errors.UnexpectedLLMResponse
-  alias BeamMePrompty.LLM.AnthropicOpts
 
   @impl true
   def completion(model, messages, tools, opts) do

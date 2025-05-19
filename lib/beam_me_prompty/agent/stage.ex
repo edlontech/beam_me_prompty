@@ -22,7 +22,10 @@ defmodule BeamMePrompty.Agent.Stage do
 
   use GenStateMachine, callback_mode: :state_functions
 
-  alias BeamMePrompty.Agent.Dsl.{FunctionResultPart, TextPart, FunctionCallPart, DataPart}
+  alias BeamMePrompty.Agent.Dsl.DataPart
+  alias BeamMePrompty.Agent.Dsl.FunctionCallPart
+  alias BeamMePrompty.Agent.Dsl.FunctionResultPart
+  alias BeamMePrompty.Agent.Dsl.TextPart
   alias BeamMePrompty.Errors
   alias BeamMePrompty.LLM.MessageParser
 

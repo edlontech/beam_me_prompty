@@ -27,8 +27,8 @@ defmodule BeamMePrompty.Agent.Executor do
     * `handle_resume/2` - Called when execution is resumed
   """
 
-  alias BeamMePrompty.DAG
   alias BeamMePrompty.Agent.ExecutorOptions
+  alias BeamMePrompty.DAG
   alias BeamMePrompty.Errors
 
   @type state :: map()

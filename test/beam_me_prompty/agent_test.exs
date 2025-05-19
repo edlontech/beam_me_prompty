@@ -2,6 +2,7 @@ defmodule BeamMePrompty.AgentTest do
   use ExUnit.Case, async: false
 
   import BeamMePrompty.Agent.Dsl.Part
+  import ExUnit.CaptureLog
   import Hammox
 
   alias BeamMePrompty.TestAgent
@@ -205,7 +206,9 @@ defmodule BeamMePrompty.AgentTest do
         end
       end
 
-      assert {:ok, _results} = BonkedToolAgent.run_sync(%{})
+      capture_log(fn ->
+        assert {:ok, _results} = BonkedToolAgent.run_sync(%{})
+      end)
     end
 
     test "handles LLM client errors" do
@@ -216,7 +219,9 @@ defmodule BeamMePrompty.AgentTest do
         {:error, BeamMePrompty.LLM.Errors.UnexpectedLLMResponse.exception()}
       end)
 
-      assert {:error, _reason} = TestAgent.run_sync(input)
+      capture_log(fn ->
+        assert {:error, _reason} = TestAgent.run_sync(input)
+      end)
     end
 
     test "properly handles nested tool calls" do

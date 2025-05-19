@@ -110,13 +110,11 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
   alias BeamMePrompty.LLM.Errors.UnexpectedLLMResponse
   alias BeamMePrompty.LLM.GoogleGeminiOpts
 
-  alias BeamMePrompty.Agent.Dsl.{
-    TextPart,
-    DataPart,
-    FilePart,
-    FunctionResultPart,
-    FunctionCallPart
-  }
+  alias BeamMePrompty.Agent.Dsl.DataPart
+  alias BeamMePrompty.Agent.Dsl.FilePart
+  alias BeamMePrompty.Agent.Dsl.FunctionCallPart
+  alias BeamMePrompty.Agent.Dsl.FunctionResultPart
+  alias BeamMePrompty.Agent.Dsl.TextPart
 
   @impl true
   def completion(model, messages, tools, opts) do
