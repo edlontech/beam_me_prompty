@@ -66,6 +66,9 @@ defmodule BeamMePrompty.Agent do
     quote do
       use BeamMePrompty.Agent.Executor
 
+      alias BeamMePrompty.Agent.Dsl
+      alias BeamMePrompty.Agent.Executor
+
       @doc false
       def child_spec(start_opts \\ []) do
         start_opts = Keyword.put_new(start_opts, :session_id, make_ref())
@@ -83,7 +86,7 @@ defmodule BeamMePrompty.Agent do
         initial_state = Keyword.get(start_opts, :initial_state, %{})
         opts = Keyword.get(start_opts, :opts, [])
 
-        BeamMePrompty.Agent.Executor.start_link(
+        Executor.start_link(
           __MODULE__,
           input,
           initial_state,
@@ -91,13 +94,29 @@ defmodule BeamMePrompty.Agent do
         )
       end
 
-      def run_sync(input, state \\ %{}, opts \\ [], timeout \\ 15_000) do
-        BeamMePrompty.Agent.Executor.execute(__MODULE__, input, state, opts, timeout)
-      end
+      @doc """
+      Runs the agent synchronously and waits for completion.
 
-      def stages() do
-        BeamMePrompty.Agent.Dsl.Info.agent(__MODULE__)
-      end
+      ## Parameters
+        * `input` - Global input data for the agent (optional, defaults to empty map)
+        * `state` - The initial state of the agent (optional, defaults to empty map)
+        * `opts` - Additional options (see `start_link/4`)
+        * `timeout` - Timeout in milliseconds (optional, defaults to 15_000 ms)
+      """
+      @spec run_sync(
+              input :: map(),
+              state :: map(),
+              opts :: keyword(),
+              timeout :: integer()
+            ) ::
+              {:ok, any()} | {:error, any()}
+      def run_sync(input, state \\ %{}, opts \\ [], timeout \\ 15_000),
+        do: Executor.execute(__MODULE__, input, state, opts, timeout)
+
+      @doc """
+      Retrieves the Agent DSL information.
+      """
+      def stages, do: Dsl.Info.agent(__MODULE__)
     end
   end
 end

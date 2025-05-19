@@ -174,9 +174,8 @@ defmodule BeamMePrompty.Agent.Executor do
       BeamMePrompty.Agents.Executor.start_link(MyAgent, %{input: "data"}, %{}, [name: MyAgent])
       {:ok, state} = BeamMePrompty.Agents.Executor.get_state(MyAgent)
   """
-  def get_results(pid_or_name, timeout \\ 5000) do
-    GenStateMachine.call(pid_or_name, :get_results, timeout)
-  end
+  def get_results(pid_or_name, timeout \\ 5000),
+    do: GenStateMachine.call(pid_or_name, :get_results, timeout)
 
   @doc """
   Executes an agent synchronously and returns the results.
