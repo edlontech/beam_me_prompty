@@ -38,6 +38,6 @@ defmodule BeamMePrompty.LLM.MessageParser do
     |> Enum.into(%{})
   end
 
-  defp to_atom(key) when is_binary(key), do: String.to_atom(key)
+  defp to_atom(key) when is_binary(key), do: String.to_existing_atom(key)
   defp to_atom(key), do: key
 end
