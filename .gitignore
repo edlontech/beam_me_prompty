@@ -28,6 +28,9 @@ erl_crash.dump
 *.plt
 .concrete/DEV_MODE
 
+/priv/plts/*.plt
+/priv/plts/*.plt.hash
+
 # rebar 2.x
 .rebar
 rel/example_project
