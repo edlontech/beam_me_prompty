@@ -20,19 +20,21 @@ defmodule BeamMePrompty.Agent.Internals do
   """
   use GenStateMachine, callback_mode: :state_functions
 
+  @type agent_type :: :stateful | :stateless
+
   defstruct [
+    :agent_type,
     :dag,
     :agent_module,
     :global_input,
     :nodes_to_execute,
     :initial_state,
     :current_state,
-    :started_at,
-    :last_transition_at,
     :opts,
     :stages_supervisor_pid,
     :stage_workers,
     :results,
+    :started_at,
     :pending_nodes,
     :current_batch_details,
     :temp_batch_results
@@ -46,6 +48,8 @@ defmodule BeamMePrompty.Agent.Internals do
 
   @impl true
   def init({dag, input, initial_agent_state, opts, agent_module_impl}) do
+    agent_type = Keyword.get(opts, :agent_type, :stateless)
+
     {init_status, new_agent_state_after_init} =
       agent_module_impl.handle_init(dag, initial_agent_state)
 
@@ -71,16 +75,17 @@ defmodule BeamMePrompty.Agent.Internals do
           end)
 
         data = %__MODULE__{
+          agent_type: agent_type,
           dag: dag,
           opts: opts,
           agent_module: agent_module_impl,
           global_input: input,
           initial_state: initial_agent_state,
           current_state: current_agent_state,
-          started_at: System.monotonic_time(:millisecond),
           stages_supervisor_pid: sup_pid,
           stage_workers: stage_workers,
           results: %{},
+          started_at: System.monotonic_time(:millisecond),
           pending_nodes: [],
           current_batch_details: %{},
           temp_batch_results: %{}
@@ -121,7 +126,11 @@ defmodule BeamMePrompty.Agent.Internals do
           data_after_plan_callback.current_state
         )
 
-        {:next_state, :completed, data_after_plan_callback}
+        if data_after_plan_callback.agent_type == :stateful do
+          {:next_state, :idle, data_after_plan_callback}
+        else
+          {:next_state, :completed, data_after_plan_callback}
+        end
 
       Enum.empty?(effective_ready_nodes) ->
         {:error,
@@ -378,6 +387,34 @@ defmodule BeamMePrompty.Agent.Internals do
     )
 
     :keep_state_and_data
+  end
+
+  def idle({:call, from}, :get_results, data) do
+    {:keep_state, data, [{:reply, from, {:ok, :idle, data.results}}]}
+  end
+
+  def idle(:cast, {:process_new_input, new_input_data, _new_nodes_spec}, data) do
+    updated_global_input = Map.merge(data.global_input, new_input_data)
+
+    data_for_replan = %{
+      data
+      | global_input: updated_global_input,
+        results: %{},
+        pending_nodes: [],
+        nodes_to_execute: [],
+        temp_batch_results: %{},
+        current_batch_details: %{}
+    }
+
+    {:next_state, :waiting_for_plan, data_for_replan, [{:next_event, :internal, :plan}]}
+  end
+
+  def idle(event_type, event_content, data) do
+    Logger.warning(
+      "Unexpected event in idle state for agent #{inspect(self())}: #{inspect(event_type)} - #{inspect(event_content)}"
+    )
+
+    {:keep_state, data}
   end
 
   def completed({:call, from}, :get_results, data) do

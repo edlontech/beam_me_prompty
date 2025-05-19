@@ -293,6 +293,9 @@ defmodule BeamMePrompty.Agent.Executor do
         Process.exit(pid, :normal)
         {:ok, results}
 
+      {:ok, :idle, _results} ->
+        :continue
+
       {:ok, _} ->
         :continue
 
