@@ -72,10 +72,22 @@ defmodule BeamMePrompty.Tool do
   @callback tool_info() :: __MODULE__.t()
 
   defmacro __using__(opts) do
+    if not Keyword.has_key?(opts, :name) do
+      raise CompileError, description: "BeamMePrompty.Tool requires a :name option"
+    end
+
+    if not Keyword.has_key?(opts, :description) do
+      raise CompileError, description: "BeamMePrompty.Tool requires a :description option"
+    end
+
+    if not Keyword.has_key?(opts, :parameters) do
+      raise CompileError, description: "BeamMePrompty.Tool requires a :parameters option"
+    end
+
     quote bind_quoted: [
             name: opts[:name],
             description: opts[:description],
-            parameters: opts[:parameters]
+            parameters: Macro.escape(opts[:parameters])
           ] do
       @behaviour BeamMePrompty.Tool
 

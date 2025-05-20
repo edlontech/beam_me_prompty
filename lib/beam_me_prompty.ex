@@ -39,24 +39,7 @@ defmodule BeamMePrompty do
             message :system, [text_part("You are a helpful assistant.")]
             message :user, [text_part("Call the TestTool")]
 
-            tool :test_tool do
-              description "Test tool description"
-              module BeamMePrompty.TestTool
-
-              parameters %{
-                type: :object,
-                properties: %{
-                  val1: %{
-                    type: :string,
-                    description: "First value"
-                  },
-                  val2: %{
-                    type: :string,
-                    description: "Second value"
-                  }
-                }
-              }
-            end
+            tools [BeamMePrompty.TestTool]
           end
         end
 
@@ -85,31 +68,6 @@ defmodule BeamMePrompty do
       {:ok, results} = MyAgent.run_sync(input, %{}, [], 30_000)
 
   ## Asynchronous Execution
-
-  Start the agent process without blocking:
-
-      {:ok, pid} =
-        MyAgent.start_link(
-          input: %{"prompt" => "Calculate 3+4"},
-          initial_state: %{},
-          opts: [],
-          session_id: :my_session
-        )
-
-      # other work...
-
-      # Fetch results (wait up to 20_000 ms)
-      {:ok, :completed, results} =
-        BeamMePrompty.Agent.Executor.get_results(pid, 20_000)
-      IO.inspect(results)
-
-  You can also register by name and fetch by name:
-
-      MyAgent.start_link(input: input, opts: [name: :worker1])
-      {:ok, :completed, results} =
-        BeamMePrompty.Agent.Executor.get_results(:worker1)
-
-  Or use the built-in manager:
 
       {:ok, pid} = BeamMePrompty.AgentManager.start_agent(MyAgent, input: input)
       {:ok, :completed, results} = BeamMePrompty.Agent.Executor.get_results(pid)
