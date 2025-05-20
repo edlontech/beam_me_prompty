@@ -1,38 +1,57 @@
 defmodule BeamMePrompty.Tool do
-  @moduledoc """
-  A behaviour module for defining tools that can be used by agents in the BeamMePrompty system.
+  use TypedStruct
 
-  Tools are executable modules that provide specific functionalities for agents to perform tasks.
-  Each tool must implement the `run/1` function that accepts an input map with parameters and
-  returns either a success tuple with a result or an error tuple.
-
-  ## Example
-
-  ```elixir
-  defmodule MyApp.Tools.Calculator do
-    @behaviour BeamMePrompty.Tool
-    
-    @impl BeamMePrompty.Tool
-    def run(%{"operation" => "add", "a" => a, "b" => b}) do
-      {:ok, %{"result" => a + b}}
-    end
-    
-    def run(%{"operation" => "subtract", "a" => a, "b" => b}) do
-      {:ok, %{"result" => a - b}}
-    end
+  typedstruct do
+    field :name, atom()
+    field :description, String.t()
+    field :parameters, map()
+    field :module, module()
   end
-  ```
-  """
 
   @doc """
-  Executes the tool with the provided input.
+  Execute the tool with the provided arguments.
 
   ## Parameters
-    * `input` - A map containing the parameters needed by the tool
-    
+
+    - `args`: A map containing the arguments to be passed to the tool.
+
   ## Returns
-    * `{:ok, result}` - On successful execution, where `result` can be a map or string
-    * `{:error, reason}` - On failure, with a reason explaining why the execution failed
+
+    - `{:ok, result}`: A tuple containing the result of the tool execution.
+    - `{:error, reason}`: A tuple containing an error reason if the execution fails.
   """
-  @callback run(input :: map()) :: {:ok, map() | String.t()} | {:error, any()}
+  @callback run(map()) :: {:ok, map() | String.t()} | {:error, any()}
+
+  @doc """
+  Required informations about the tool, this is used by LLMs to know how to call the tool.
+
+  ## Returns
+
+    - `%Tool{}`: A struct containing the tool's name, description, parameters, and OpenAPI schema.
+  """
+  @callback tool_info() :: __MODULE__.t()
+
+  defmacro __using__(opts) do
+    quote bind_quoted: [
+            name: opts[:name],
+            description: opts[:description],
+            parameters: opts[:parameters]
+          ] do
+      @behaviour BeamMePrompty.Tool
+
+      alias BeamMePrompty.Tool
+
+      @impl BeamMePrompty.Tool
+      def tool_info do
+        %Tool{
+          name: unquote(name),
+          description: unquote(description),
+          parameters: unquote(parameters),
+          module: __MODULE__
+        }
+      end
+
+      defoverridable tool_info: 0
+    end
+  end
 end

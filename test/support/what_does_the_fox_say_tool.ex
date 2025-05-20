@@ -1,6 +1,6 @@
 defmodule BeamMePrompty.WhatDoesTheFoxSayTool do
   @moduledoc false
-  @behaviour BeamMePrompty.Tool
+  use BeamMePrompty.Tool, name: :sounds_of_the_fox
 
   @impl true
   def run(%{"fox_species" => fox}) do

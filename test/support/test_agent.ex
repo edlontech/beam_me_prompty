@@ -25,24 +25,7 @@ defmodule BeamMePrompty.TestAgent do
         message :system, [text_part("You are a helpful assistant.")]
         message :user, [text_part("Call the TestTool")]
 
-        tool :test_tool do
-          description "Test tool description"
-          module BeamMePrompty.TestTool
-
-          parameters %{
-            type: :object,
-            properties: %{
-              val1: %{
-                type: :string,
-                description: "First value"
-              },
-              val2: %{
-                type: :string,
-                description: "Second value"
-              }
-            }
-          }
-        end
+        tools [BeamMePrompty.TestTool]
       end
     end
 

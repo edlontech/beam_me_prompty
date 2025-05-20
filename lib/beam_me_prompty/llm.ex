@@ -8,7 +8,7 @@ defmodule BeamMePrompty.LLM do
 
   alias BeamMePrompty.Agent.Dsl.LLMParams
   alias BeamMePrompty.Agent.Dsl.Part
-  alias BeamMePrompty.Agent.Dsl.Tool
+  alias BeamMePrompty.Tool
 
   @type roles :: :system | :user | :assistant
 

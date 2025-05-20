@@ -172,10 +172,12 @@ defmodule BeamMePrompty.Agent.Stage do
           _ -> %BeamMePrompty.Agent.Dsl.LLMParams{}
         end
 
+      tools = Enum.map(config.tools, & &1.tool_info())
+
       process_llm_interactions(
         config.llm_client,
         config.model,
-        config.tools || [],
+        tools,
         llm_params,
         initial_messages_history,
         stage_prompt_messages,

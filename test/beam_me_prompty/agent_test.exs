@@ -19,6 +19,28 @@ defmodule BeamMePrompty.AgentTest do
         {:ok, "Yes, it's a platypus"}
       end)
 
+      expect(BeamMePrompty.TestTool, :tool_info, fn ->
+        %BeamMePrompty.Tool{
+          name: :test_tool,
+          description: "Test tool",
+          module: BeamMePrompty.TestTool,
+          parameters: %{
+            type: "object",
+            properties: %{
+              val1: %{
+                type: "string",
+                description: "First value"
+              },
+              val2: %{
+                type: "string",
+                description: "Second value"
+              }
+            },
+            required: ["val1", "val2"]
+          }
+        }
+      end)
+
       BeamMePrompty.FakeLlmClient
       |> expect(:completion, fn _model, messages, _tools, opts ->
         assert opts.temperature == 0.5
@@ -40,15 +62,16 @@ defmodule BeamMePrompty.AgentTest do
                ] == messages
 
         assert tools == [
-                 %BeamMePrompty.Agent.Dsl.Tool{
+                 %BeamMePrompty.Tool{
                    parameters: %{
-                     type: :object,
+                     type: "object",
+                     required: ["val1", "val2"],
                      properties: %{
-                       val1: %{type: :string, description: "First value"},
-                       val2: %{type: :string, description: "Second value"}
+                       val1: %{type: "string", description: "First value"},
+                       val2: %{type: "string", description: "Second value"}
                      }
                    },
-                   description: "Test tool description",
+                   description: "Test tool",
                    name: :test_tool,
                    module: BeamMePrompty.TestTool
                  }
@@ -131,6 +154,28 @@ defmodule BeamMePrompty.AgentTest do
         {:error, "err"}
       end)
 
+      expect(BeamMePrompty.TestTool, :tool_info, fn ->
+        %BeamMePrompty.Tool{
+          name: :test_tool,
+          description: "Test tool",
+          module: BeamMePrompty.TestTool,
+          parameters: %{
+            type: "object",
+            properties: %{
+              val1: %{
+                type: "string",
+                description: "First value"
+              },
+              val2: %{
+                type: "string",
+                description: "Second value"
+              }
+            },
+            required: ["val1", "val2"]
+          }
+        }
+      end)
+
       BeamMePrompty.FakeLlmClient
       |> expect(:completion, fn _model, _messages, _tools, _opts ->
         {:ok,
@@ -183,24 +228,7 @@ defmodule BeamMePrompty.AgentTest do
               message :system, [text_part("You are a helpful assistant.")]
               message :user, [text_part("Bonk Bonk")]
 
-              tool :test_tool do
-                description "Test tool description"
-                module BeamMePrompty.TestTool
-
-                parameters %{
-                  type: :object,
-                  properties: %{
-                    val1: %{
-                      type: :string,
-                      description: "First value"
-                    },
-                    val2: %{
-                      type: :string,
-                      description: "Second value"
-                    }
-                  }
-                }
-              end
+              tools [BeamMePrompty.TestTool]
             end
           end
         end
@@ -233,6 +261,28 @@ defmodule BeamMePrompty.AgentTest do
           %{"val1" => "first_call"} -> {:ok, "First tool result"}
           %{"val1" => "second_call"} -> {:ok, "Second tool result"}
         end
+      end)
+
+      expect(BeamMePrompty.TestTool, :tool_info, fn ->
+        %BeamMePrompty.Tool{
+          name: :test_tool,
+          description: "Test tool",
+          module: BeamMePrompty.TestTool,
+          parameters: %{
+            type: "object",
+            properties: %{
+              val1: %{
+                type: "string",
+                description: "First value"
+              },
+              val2: %{
+                type: "string",
+                description: "Second value"
+              }
+            },
+            required: ["val1", "val2"]
+          }
+        }
       end)
 
       BeamMePrompty.FakeLlmClient
@@ -292,6 +342,28 @@ defmodule BeamMePrompty.AgentTest do
 
     test "handles undefined tools gracefully" do
       input = %{"text" => "undefined tool"}
+
+      expect(BeamMePrompty.TestTool, :tool_info, fn ->
+        %BeamMePrompty.Tool{
+          name: :test_tool,
+          description: "Test tool",
+          module: BeamMePrompty.TestTool,
+          parameters: %{
+            type: "object",
+            properties: %{
+              val1: %{
+                type: "string",
+                description: "First value"
+              },
+              val2: %{
+                type: "string",
+                description: "Second value"
+              }
+            },
+            required: ["val1", "val2"]
+          }
+        }
+      end)
 
       BeamMePrompty.FakeLlmClient
       |> expect(:completion, fn _, _, _, _ ->

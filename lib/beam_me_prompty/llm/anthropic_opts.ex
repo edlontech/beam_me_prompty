@@ -88,8 +88,9 @@ defmodule BeamMePrompty.LLM.AnthropicOpts do
 
   alias BeamMePrompty.Agent.Dsl.LLMParams
   alias BeamMePrompty.LLM.Errors.InvalidConfig
+  alias BeamMePrompty.Tool
 
-  @spec validate(String.t(), any(), LLMParams.t()) ::
+  @spec validate(String.t(), [Tool.t()], LLMParams.t()) ::
           {:ok, t()} | {:error, Splode.Error.t()}
   def validate(model, tools, config) do
     config =

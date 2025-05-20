@@ -32,18 +32,7 @@ defmodule BeamMePrompty.GeminiAgent do
           }
         ]
 
-        tool :sounds_of_the_fox do
-          module BeamMePrompty.WhatDoesTheFoxSayTool
-          description "A tool that returns the sounds of a fox."
-
-          parameters %{
-            type: :object,
-            properties: %{
-              fox_species: %{type: :string, description: "Fox species"}
-            },
-            required: [:fox_species]
-          }
-        end
+        tools [BeamMePrompty.WhatDoesTheFoxSayTool]
       end
     end
   end

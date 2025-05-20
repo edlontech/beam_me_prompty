@@ -33,6 +33,8 @@ defmodule BeamMePrompty.Agent.Dsl do
 
   @type openapi_schema() :: map()
 
+  alias BeamMePrompty.Tool
+
   typedstruct module: TextPart do
     @moduledoc false
     field :type, :text
@@ -87,14 +89,6 @@ defmodule BeamMePrompty.Agent.Dsl do
           )
   end
 
-  typedstruct module: Tool do
-    @moduledoc false
-    field :module, module()
-    field :name, atom()
-    field :description, String.t()
-    field :parameters, BeamMePrompty.Agent.Dsl.openapi_schema()
-  end
-
   typedstruct module: LLMParams do
     @moduledoc false
     field :max_tokens, integer() | nil
@@ -115,44 +109,16 @@ defmodule BeamMePrompty.Agent.Dsl do
     field :llm_client, {module(), keyword()}
     field :params, LLMParams.t() | nil
     field :messages, list(Message.t())
-    field :tools, list(Tool.t())
+    field :tools, list(Tool.t()), default: []
   end
 
   typedstruct module: Stage do
     @moduledoc false
     field :name, atom()
-    field :depends_on, list(String.t()) | nil
+    field :depends_on, list(atom()) | nil
     field :llm, LLM.t() | nil
+    field :entrypoint, boolean(), default: false
   end
-
-  @tool_entity %Spark.Dsl.Entity{
-    name: :tool,
-    target: Tool,
-    args: [:name],
-    describe: "Defines a tool that the agent can use.",
-    schema: [
-      name: [
-        type: :atom,
-        required: true,
-        doc: "Name of the tool."
-      ],
-      module: [
-        type: :module,
-        required: true,
-        doc: "Module implementing the tool."
-      ],
-      description: [
-        type: :string,
-        required: true,
-        doc: "Description of the tool."
-      ],
-      parameters: [
-        type: :map,
-        required: true,
-        doc: "Parameters for the tool."
-      ]
-    ]
-  }
 
   @message_entity %Spark.Dsl.Entity{
     name: :message,
@@ -235,13 +201,16 @@ defmodule BeamMePrompty.Agent.Dsl do
     target: LLM,
     entities: [
       params: [@llm_params_entity],
-      messages: [@message_entity],
-      tools: [@tool_entity]
+      messages: [@message_entity]
     ],
     schema: [
       model: [
         required: true,
         type: :string
+      ],
+      tools: [
+        required: false,
+        type: {:list, :any}
       ],
       llm_client: [
         type: {:behaviour, BeamMePrompty.LLM},
@@ -269,6 +238,11 @@ defmodule BeamMePrompty.Agent.Dsl do
         type: {:list, :atom},
         default: [],
         doc: "List of stages that this stage depends on."
+      ],
+      entrypoint: [
+        type: :boolean,
+        default: false,
+        doc: "Whether this stage can be used as an entrypoint for the agent."
       ]
     ]
   }
