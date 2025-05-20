@@ -72,33 +72,48 @@ defmodule BeamMePrompty.Agent.Stage do
     }
 
     if agent_module_from_ctx do
-      agent_module_from_ctx.handle_stage_start(node_def, agent_state_from_ctx)
+      agent_module_from_ctx.handle_stage_start(
+        node_def,
+        data_with_agent_context.current_agent_state
+      )
     end
 
-    {stage_execution_result, result_payload, final_stage_data} =
-      do_execute_stage(node_def, node_ctx, data_with_agent_context)
+    execution_params = {node_name, node_def, node_ctx, caller_pid}
 
-    case stage_execution_result do
-      :ok ->
-        send(
-          caller_pid,
-          {:stage_response, node_name, {:ok, result_payload},
-           final_stage_data.current_agent_state}
-        )
-
-      :error ->
-        send(
-          caller_pid,
-          {:stage_response, node_name, {:error, result_payload},
-           final_stage_data.current_agent_state}
-        )
-    end
-
-    {:next_state, :idle, final_stage_data}
+    {:next_state, :executing_llm, data_with_agent_context,
+     {:next_event, :internal, {:execute, execution_params}}}
   end
 
   def idle(_event_type, _event_content, data) do
     {:keep_state, data}
+  end
+
+  # --- :executing_llm State ---
+
+  def executing_llm(
+        :internal,
+        {:execute, {node_name, node_def, node_ctx, caller_pid}},
+        data
+      ) do
+    {stage_execution_result, result_payload, final_stage_data} =
+      do_execute_stage(node_def, node_ctx, data)
+
+    response_payload =
+      case stage_execution_result do
+        :ok -> {:ok, result_payload}
+        :error -> {:error, result_payload}
+      end
+
+    send(
+      caller_pid,
+      {:stage_response, node_name, response_payload, final_stage_data.current_agent_state}
+    )
+
+    {:next_state, :idle, final_stage_data}
+  end
+
+  def executing_llm(_event_type, _event_content, _data) do
+    {:keep_state_and_data, :postpone}
   end
 
   @impl true
@@ -370,7 +385,6 @@ defmodule BeamMePrompty.Agent.Stage do
       tool_not_found_msg_to_llm,
       remaining_iterations,
       agent_module,
-      # Pass the updated agent state
       updated_agent_state_post_tool_result_cb
     )
   end
