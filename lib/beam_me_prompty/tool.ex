@@ -1,4 +1,44 @@
 defmodule BeamMePrompty.Tool do
+  @moduledoc """
+  Defines the behaviour and structure for tools that can be executed by Language Models (LLMs).
+
+  A `BeamMePrompty.Tool` module acts as an interface that LLMs can understand and interact with
+  to perform specific actions or retrieve information. Modules implementing this behaviour
+  must provide a `tool_info/0` function describing the tool (name, description, parameters)
+  and a `run/1` function to execute the tool's logic.
+
+  ## Examples
+
+  A simple tool module might look like this:
+
+  ```elixir
+  defmodule MyTool do
+    use BeamMePrompty.Tool,
+      name: :my_tool,
+      description: "A simple example tool",
+      parameters: %{
+        type: :object,
+        properties: %{
+          input_string: %{
+            type: :string,
+            description: "The string to process"
+          }
+        },
+        required: [:input_string]
+      }
+
+    @impl BeamMePrompty.Tool
+    def run(%{"input_string" => input}) do
+      {:ok, "Processed: \#{input}"}
+    end
+
+    def run(args) do
+      {:error, "Invalid arguments: \#{inspect(args)}"}
+    end
+  end
+  ```
+  """
+
   use TypedStruct
 
   typedstruct do
