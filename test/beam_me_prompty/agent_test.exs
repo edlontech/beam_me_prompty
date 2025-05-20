@@ -6,6 +6,7 @@ defmodule BeamMePrompty.AgentTest do
   import Hammox
 
   alias BeamMePrompty.TestAgent
+  alias BeamMePrompty.LLM.Errors.ToolError
 
   setup :set_mox_from_context
   setup :verify_on_exit!
@@ -151,7 +152,11 @@ defmodule BeamMePrompty.AgentTest do
 
     test "handles tool execution errors gracefully" do
       expect(BeamMePrompty.TestTool, :run, fn _args ->
-        {:error, "err"}
+        {:error,
+         ToolError.exception(
+           module: BeamMePrompty.TestTool,
+           cause: "Boinkers do bonk"
+         )}
       end)
 
       expect(BeamMePrompty.TestTool, :tool_info, fn ->
@@ -208,7 +213,7 @@ defmodule BeamMePrompty.AgentTest do
                  ],
                  user: [
                    %BeamMePrompty.Agent.Dsl.FunctionResultPart{
-                     result: "Error executing tool test_tool (call_id: N/A): \"err\"",
+                     result: "Error executing tool test_tool (call_id: N/A): Boinkers do bonk",
                      name: :test_tool,
                      id: nil
                    }

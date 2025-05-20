@@ -41,6 +41,8 @@ defmodule BeamMePrompty.Tool do
 
   use TypedStruct
 
+  alias BeamMePrompty.LLM.Errors.ToolError
+
   typedstruct do
     field :name, atom()
     field :description, String.t()
@@ -60,7 +62,7 @@ defmodule BeamMePrompty.Tool do
     - `{:ok, result}`: A tuple containing the result of the tool execution.
     - `{:error, reason}`: A tuple containing an error reason if the execution fails.
   """
-  @callback run(map()) :: {:ok, map() | String.t()} | {:error, any()}
+  @callback run(map()) :: {:ok, map() | String.t()} | {:error, ToolError.t()}
 
   @doc """
   Required informations about the tool, this is used by LLMs to know how to call the tool.

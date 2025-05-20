@@ -28,6 +28,7 @@ defmodule BeamMePrompty.Agent.Stage do
   alias BeamMePrompty.Agent.Dsl.TextPart
   alias BeamMePrompty.Errors
   alias BeamMePrompty.LLM.MessageParser
+  alias BeamMePrompty.LLM.Errors.ToolError
 
   defstruct [
     :stage_name,
@@ -492,9 +493,14 @@ defmodule BeamMePrompty.Agent.Stage do
      ]}
   end
 
-  defp format_tool_error_as_message(tool_call_id, fun_name, error) do
+  defp format_tool_error_as_message(tool_call_id, fun_name, error)
+       when is_struct(error, ToolError) do
+    format_tool_error_as_message(tool_call_id, fun_name, error.cause)
+  end
+
+  defp format_tool_error_as_message(tool_call_id, fun_name, error) when is_binary(error) do
     content =
-      "Error executing tool #{fun_name} (call_id: #{tool_call_id || "N/A"}): #{inspect(error)}"
+      "Error executing tool #{fun_name} (call_id: #{tool_call_id || "N/A"}): #{error}"
 
     {:user,
      [
