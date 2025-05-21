@@ -110,7 +110,11 @@ defmodule BeamMePrompty.Agent.Stage do
       {:stage_response, node_name, response_payload, final_stage_data.current_agent_state}
     )
 
-    {:next_state, :idle, final_stage_data}
+    if node_def.entrypoint do
+      {:next_state, :idle, final_stage_data}
+    else
+      {:stop, :normal, final_stage_data}
+    end
   end
 
   def executing_llm(_event_type, _event_content, _data) do

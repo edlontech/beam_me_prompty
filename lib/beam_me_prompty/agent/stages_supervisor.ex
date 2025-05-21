@@ -31,7 +31,7 @@ defmodule BeamMePrompty.Agent.StagesSupervisor do
     spec = %{
       id: {Stage, stage_name},
       start: {Stage, :start_link, [{stage_name}]},
-      restart: :transient
+      restart: :permanent
     }
 
     DynamicSupervisor.start_child(supervisor_pid_or_name, spec)
