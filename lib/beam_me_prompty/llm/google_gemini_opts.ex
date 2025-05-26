@@ -76,19 +76,17 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
   def validate(model, tools, config) do
     config =
       [
-        max_output_tokens: get_in(config, [:max_tokens]),
-        temperature: get_in(config, [:temperature]),
-        top_p: get_in(config, [:top_p]),
-        top_k: get_in(config, [:top_k]),
+        max_output_tokens: config.max_tokens,
+        temperature: config.temperature,
+        top_p: config.top_p,
+        top_k: config.top_k,
         key:
-          config
-          |> get_in([:key])
+          config.api_key
           |> api_key(),
-        response_schema: get_in(config, [:response_schema]),
-        thinking_budget: get_in(config, [:thinking_budget]),
+        response_schema: config.structured_response,
+        thinking_budget: config.thinking_budget,
         tools: parse_dsl_tools(tools),
-        model: model,
-        http_adapter: get_in(config, [:http_adapter])
+        model: model
       ]
       |> Keyword.reject(fn {_, v} -> is_nil(v) end)
 

@@ -80,9 +80,9 @@ defmodule BeamMePrompty.LLM.Anthropic do
   alias BeamMePrompty.LLM.Errors.UnexpectedLLMResponse
 
   @impl true
-  def completion(model, messages, tools, opts) do
-    with {:ok, opts} <- AnthropicOpts.validate(model, tools, opts),
-         {:ok, response} <- call_api(messages, opts) do
+  def completion(model, messages, llm_params, tools, opts) do
+    with {:ok, llm_params} <- AnthropicOpts.validate(model, tools, llm_params),
+         {:ok, response} <- call_api(messages, llm_params, opts) do
       {:ok, response}
     else
       {:error, error} ->
@@ -90,25 +90,25 @@ defmodule BeamMePrompty.LLM.Anthropic do
     end
   end
 
-  defp call_api(messages, opts) do
+  defp call_api(messages, llm_params, opts) do
     prepared_data = prepare_messages(messages)
 
     payload_base = %{
-      model: opts[:model],
-      max_tokens: opts[:max_tokens],
-      temperature: opts[:temperature],
-      top_k: opts[:top_k],
-      top_p: opts[:top_p]
+      model: llm_params[:model],
+      max_tokens: llm_params[:max_tokens],
+      temperature: llm_params[:temperature],
+      top_k: llm_params[:top_k],
+      top_p: llm_params[:top_p]
     }
 
     thinking_budget =
-      if opts[:thinking] do
-        %{budget_tokens: opts[:thinking_budget_tokens], type: "enabled"}
+      if llm_params[:thinking] do
+        %{budget_tokens: llm_params[:thinking_budget_tokens], type: "enabled"}
       else
         %{}
       end
 
-    tooling = tool_choice(opts[:tools])
+    tooling = tool_choice(llm_params[:tools])
 
     payload =
       payload_base
@@ -124,7 +124,7 @@ defmodule BeamMePrompty.LLM.Anthropic do
       |> Map.merge(thinking_budget)
       |> Map.reject(fn {_k, v} -> is_nil(v) end)
 
-    client(opts)
+    client(llm_params, opts)
     |> Req.post(url: "/messages", json: payload)
     |> parse_response()
   end
@@ -179,12 +179,12 @@ defmodule BeamMePrompty.LLM.Anthropic do
 
   defp parse_content(content), do: content
 
-  defp client(opts) do
+  defp client(llm_params, opts) do
     Req.new(
       base_url: "https://api.anthropic.com/v1",
       headers: %{
-        :"x-api-key" => opts[:key],
-        :"anthropic-version" => opts[:version]
+        :"x-api-key" => llm_params[:api_key],
+        :"anthropic-version" => llm_params[:version]
       },
       plug:
         case opts[:http_adapter] do

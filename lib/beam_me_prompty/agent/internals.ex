@@ -33,6 +33,7 @@ defmodule BeamMePrompty.Agent.Internals do
     :opts,
     :stages_supervisor_pid,
     :stage_workers,
+    :previous_results,
     :results,
     :started_at,
     :pending_nodes,
@@ -48,7 +49,7 @@ defmodule BeamMePrompty.Agent.Internals do
 
   @impl true
   def init({dag, input, initial_agent_state, opts, agent_module_impl}) do
-    agent_type = Keyword.get(opts, :agent_type, :stateless)
+    agent_type = Keyword.get(opts, :agent_state, :stateless)
 
     {init_status, new_agent_state_after_init} =
       agent_module_impl.handle_init(dag, initial_agent_state)
@@ -84,6 +85,7 @@ defmodule BeamMePrompty.Agent.Internals do
           current_state: current_agent_state,
           stages_supervisor_pid: sup_pid,
           stage_workers: stage_workers,
+          previous_results: [],
           results: %{},
           started_at: System.monotonic_time(:millisecond),
           pending_nodes: [],
@@ -393,12 +395,17 @@ defmodule BeamMePrompty.Agent.Internals do
     {:keep_state, data, [{:reply, from, {:ok, :idle, data.results}}]}
   end
 
-  def idle(:cast, {:process_new_input, new_input_data, _new_nodes_spec}, data) do
-    updated_global_input = Map.merge(data.global_input, new_input_data)
+  def idle(:cast, {:message, message}, data) do
+    entry_point_stage = find_entry_point_stage(data.dag.nodes)
+
+    if entry_point_stage do
+      stage_pid = Map.get(data.stage_workers, entry_point_stage)
+      GenStateMachine.cast(stage_pid, {:update_messages, message, false})
+    end
 
     data_for_replan = %{
       data
-      | global_input: updated_global_input,
+      | previous_results: data.previous_results ++ [data.results],
         results: %{},
         pending_nodes: [],
         nodes_to_execute: [],
@@ -500,6 +507,24 @@ defmodule BeamMePrompty.Agent.Internals do
         )
 
         {:stop, {:unexpected_handle_error_response, unexpected_response}, data}
+    end
+  end
+
+  # Helper function to find entry point stage
+  defp find_entry_point_stage(nodes) do
+    # First, look for explicitly marked entry point
+    entry_point =
+      Enum.find(nodes, fn {_name, node_def} ->
+        Map.get(node_def, :entry_point, false)
+      end)
+
+    case entry_point do
+      {name, _def} ->
+        name
+
+      nil ->
+        # Fallback: use first stage in topological order
+        nodes |> Map.keys() |> List.first()
     end
   end
 end

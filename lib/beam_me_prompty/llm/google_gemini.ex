@@ -117,9 +117,9 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
   alias BeamMePrompty.Agent.Dsl.TextPart
 
   @impl true
-  def completion(model, messages, tools, opts) do
-    with {:ok, opts} <- GoogleGeminiOpts.validate(model, tools, opts),
-         {:ok, response} <- call_api(messages, opts) do
+  def completion(model, messages, llm_params, tools, opts) do
+    with {:ok, llm_params} <- GoogleGeminiOpts.validate(model, tools, llm_params),
+         {:ok, response} <- call_api(messages, llm_params, opts) do
       {:ok, response}
     else
       {:error, error} ->
@@ -127,15 +127,15 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
     end
   end
 
-  defp call_api(messages, opts) do
+  defp call_api(messages, llm_params, opts) do
     generation_config =
       %{
-        top_k: opts[:top_k],
-        top_p: opts[:top_p],
-        temperature: opts[:temperature],
-        max_output_tokens: opts[:max_output_tokens],
-        thinking_budget: opts[:thinking_budget],
-        response_schema: opts[:response_schema]
+        top_k: llm_params[:top_k],
+        top_p: llm_params[:top_p],
+        temperature: llm_params[:temperature],
+        max_output_tokens: llm_params[:max_output_tokens],
+        thinking_budget: llm_params[:thinking_budget],
+        response_schema: llm_params[:response_schema]
       }
       |> Map.reject(fn {_k, v} -> is_nil(v) end)
 
@@ -158,7 +158,7 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
         base_payload
       end
 
-    client(opts)
+    client(llm_params, opts)
     |> Req.post(url: "/models/{model}:generateContent", json: payload)
     |> parse_response()
   end
@@ -222,11 +222,11 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
      )}
   end
 
-  defp client(opts) do
+  defp client(llm_params, opts) do
     Req.new(
       base_url: "https://generativelanguage.googleapis.com/v1beta",
-      params: [key: opts[:key]],
-      path_params: [model: opts[:model]],
+      params: [key: llm_params[:key]],
+      path_params: [model: llm_params[:model]],
       path_params_style: :curly,
       plug:
         case opts[:http_adapter] do

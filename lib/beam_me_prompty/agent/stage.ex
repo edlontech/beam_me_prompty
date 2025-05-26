@@ -85,6 +85,18 @@ defmodule BeamMePrompty.Agent.Stage do
      {:next_event, :internal, {:execute, execution_params}}}
   end
 
+  def idle(:cast, {:update_messages, new_message, reset_history}, data) do
+    updated_messages =
+      if reset_history do
+        [new_message]
+      else
+        data.messages ++ [new_message]
+      end
+
+    updated_data = %{data | messages: updated_messages}
+    {:keep_state, updated_data}
+  end
+
   def idle(_event_type, _event_content, data) do
     {:keep_state, data}
   end
@@ -110,11 +122,7 @@ defmodule BeamMePrompty.Agent.Stage do
       {:stage_response, node_name, response_payload, final_stage_data.current_agent_state}
     )
 
-    if node_def.entrypoint do
-      {:next_state, :idle, final_stage_data}
-    else
-      {:stop, :normal, final_stage_data}
-    end
+    {:next_state, :idle, final_stage_data}
   end
 
   def executing_llm(_event_type, _event_content, _data) do
@@ -183,9 +191,6 @@ defmodule BeamMePrompty.Agent.Stage do
        )
        when is_map(config) do
     if config.model && config.llm_client do
-      stage_prompt_messages =
-        if config.messages, do: MessageParser.parse(config.messages, input), else: []
-
       llm_params =
         case config.params do
           [p | _] -> p
@@ -194,13 +199,20 @@ defmodule BeamMePrompty.Agent.Stage do
 
       tools = Enum.map(config.tools, & &1.tool_info())
 
+      messages =
+        if Enum.empty?(initial_messages_history) do
+          MessageParser.parse(config.messages, input)
+        else
+          initial_messages_history
+        end
+
       process_llm_interactions(
         config.llm_client,
         config.model,
         tools,
         llm_params,
         initial_messages_history,
-        stage_prompt_messages,
+        messages,
         5,
         agent_module,
         current_agent_state
@@ -252,12 +264,15 @@ defmodule BeamMePrompty.Agent.Stage do
        ) do
     messages_to_send_to_llm = accumulated_messages ++ current_request_messages
 
+    {llm_client, opts} = if is_tuple(llm_client), do: llm_client, else: {llm_client, []}
+
     case BeamMePrompty.LLM.completion(
            llm_client,
            model,
            messages_to_send_to_llm,
+           llm_params,
            available_tools,
-           llm_params
+           opts
          ) do
       {:ok, llm_response_content} ->
         assistant_response_message = format_response(llm_response_content)

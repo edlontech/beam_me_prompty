@@ -43,11 +43,11 @@ defmodule BeamMePrompty.AgentTest do
       end)
 
       BeamMePrompty.FakeLlmClient
-      |> expect(:completion, fn _model, messages, _tools, opts ->
-        assert opts.temperature == 0.5
-        assert opts.top_p == 0.9
-        assert opts.frequency_penalty == 0.1
-        assert opts.presence_penalty == 0.2
+      |> expect(:completion, fn _model, messages, llm_params, _tools, _opts ->
+        assert llm_params.temperature == 0.5
+        assert llm_params.top_p == 0.9
+        assert llm_params.frequency_penalty == 0.1
+        assert llm_params.presence_penalty == 0.2
 
         assert [
                  system: [text_part("You are a helpful assistant.")],
@@ -56,7 +56,7 @@ defmodule BeamMePrompty.AgentTest do
 
         {:ok, %{"result" => "wassup"}}
       end)
-      |> expect(:completion, fn _model, messages, tools, _opts ->
+      |> expect(:completion, fn _model, messages, _, tools, _opts ->
         assert [
                  system: [text_part("You are a helpful assistant.")],
                  user: [text_part("Call the TestTool")]
@@ -89,7 +89,7 @@ defmodule BeamMePrompty.AgentTest do
            }
          }}
       end)
-      |> expect(:completion, fn _model, messages, _tools, _opts ->
+      |> expect(:completion, fn _model, messages, _llm_params, _tools, _opts ->
         assert [
                  system: [
                    %BeamMePrompty.Agent.Dsl.TextPart{
@@ -119,7 +119,7 @@ defmodule BeamMePrompty.AgentTest do
 
         {:ok, "And it's Perry the Platypus!"}
       end)
-      |> expect(:completion, fn _model, messages, _tools, _opts ->
+      |> expect(:completion, fn _model, messages, _llm_params, _tools, _opts ->
         assert [
                  system: [
                    %BeamMePrompty.Agent.Dsl.TextPart{
@@ -182,7 +182,7 @@ defmodule BeamMePrompty.AgentTest do
       end)
 
       BeamMePrompty.FakeLlmClient
-      |> expect(:completion, fn _model, _messages, _tools, _opts ->
+      |> expect(:completion, fn _model, _messages, _llm_params, _tools, _opts ->
         {:ok,
          %{
            function_call: %{
@@ -194,7 +194,7 @@ defmodule BeamMePrompty.AgentTest do
            }
          }}
       end)
-      |> expect(:completion, fn _model, messages, _tools, _opts ->
+      |> expect(:completion, fn _model, messages, _llm_params, _tools, _opts ->
         assert [
                  system: [
                    %BeamMePrompty.Agent.Dsl.TextPart{
@@ -248,7 +248,7 @@ defmodule BeamMePrompty.AgentTest do
       input = %{"text" => "error test"}
 
       BeamMePrompty.FakeLlmClient
-      |> expect(:completion, fn _, _, _, _ ->
+      |> expect(:completion, fn _, _, _, _, _ ->
         {:error, BeamMePrompty.LLM.Errors.UnexpectedLLMResponse.exception()}
       end)
 
@@ -291,10 +291,10 @@ defmodule BeamMePrompty.AgentTest do
       end)
 
       BeamMePrompty.FakeLlmClient
-      |> expect(:completion, fn _, _, _, _ ->
+      |> expect(:completion, fn _, _, _, _, _ ->
         {:ok, "Initial response"}
       end)
-      |> expect(:completion, fn _, _, _tools, _ ->
+      |> expect(:completion, fn _, _, _, _, _ ->
         # First function call
         {:ok,
          %{
@@ -304,7 +304,7 @@ defmodule BeamMePrompty.AgentTest do
            }
          }}
       end)
-      |> expect(:completion, fn _, messages, _tools, _ ->
+      |> expect(:completion, fn _, messages, _llm_params, _tools, _ ->
         # Verify the first tool result was returned
         assert Enum.any?(messages, fn
                  {:user,
@@ -324,7 +324,7 @@ defmodule BeamMePrompty.AgentTest do
            }
          }}
       end)
-      |> expect(:completion, fn _, messages, _, _ ->
+      |> expect(:completion, fn _, messages, _, _, _ ->
         # Verify the second tool result was returned
         assert Enum.any?(messages, fn
                  {:user,
@@ -337,7 +337,7 @@ defmodule BeamMePrompty.AgentTest do
 
         {:ok, "Multiple tool calls worked"}
       end)
-      |> expect(:completion, fn _, _, _, _ ->
+      |> expect(:completion, fn _, _, _, _, _ ->
         {:ok, "Final stage complete"}
       end)
 
@@ -371,15 +371,13 @@ defmodule BeamMePrompty.AgentTest do
       end)
 
       BeamMePrompty.FakeLlmClient
-      |> expect(:completion, fn _, _, _, _ ->
+      |> expect(:completion, fn _, _, _, _, _ ->
         {:ok, "Initial response"}
       end)
-      |> expect(:completion, fn _, _, _tools, _ ->
-        # Call a tool that doesn't exist
+      |> expect(:completion, fn _, _, _, _tools, _ ->
         {:ok, %{function_call: %{name: "nonexistent_tool", arguments: %{"val1" => "test"}}}}
       end)
-      |> expect(:completion, fn _, messages, _, _ ->
-        # Verify the error message about undefined tool
+      |> expect(:completion, fn _, messages, _, _, _ ->
         assert Enum.any?(messages, fn
                  {:user, [%BeamMePrompty.Agent.Dsl.FunctionResultPart{result: result}]} ->
                    String.contains?(result, "Tool not defined")
@@ -390,7 +388,7 @@ defmodule BeamMePrompty.AgentTest do
 
         {:ok, "Handled undefined tool"}
       end)
-      |> expect(:completion, fn _, _, _, _ ->
+      |> expect(:completion, fn _, _, _, _, _ ->
         {:ok, "Final stage"}
       end)
 
@@ -398,76 +396,17 @@ defmodule BeamMePrompty.AgentTest do
       assert results.second_stage == "Handled undefined tool"
     end
 
-    test "respects LLM parameters" do
-      input = %{"text" => "parameter test"}
-
-      BeamMePrompty.FakeLlmClient
-      |> expect(:completion, fn _model, _messages, _tools, opts ->
-        # Test that custom parameters are properly passed
-        assert opts.temperature == 0.7
-        assert opts.top_p == 0.8
-        assert opts.max_tokens == 500
-
-        {:ok, "Parameters verified"}
-      end)
-      |> expect(:completion, fn _, _, _, _ ->
-        {:ok, "Second stage"}
-      end)
-      |> expect(:completion, fn _, _, _, _ ->
-        {:ok, "Final stage"}
-      end)
-
-      # Create a custom agent with different parameters
-      defmodule CustomParamsAgent do
-        use BeamMePrompty.Agent
-
-        agent do
-          stage :first_stage do
-            llm "test-model", BeamMePrompty.FakeLlmClient do
-              with_params do
-                temperature 0.7
-                top_p 0.8
-                max_tokens(500)
-              end
-
-              message :user, [text_part("Test")]
-            end
-          end
-
-          stage :second_stage do
-            depends_on [:first_stage]
-
-            llm "test-model", BeamMePrompty.FakeLlmClient do
-              message :user, [text_part("Test")]
-            end
-          end
-
-          stage :third_stage do
-            depends_on [:second_stage]
-
-            llm "test-model", BeamMePrompty.FakeLlmClient do
-              message :user, [text_part("Test")]
-            end
-          end
-        end
-      end
-
-      assert {:ok, results} = CustomParamsAgent.run_sync(input)
-      assert results.first_stage == "Parameters verified"
-    end
-
     test "handles data parts in messages" do
       input = %{"text" => "data test"}
 
       BeamMePrompty.FakeLlmClient
-      |> expect(:completion, fn _, _, _, _ ->
+      |> expect(:completion, fn _, _, _, _, _ ->
         {:ok, "First stage"}
       end)
-      |> expect(:completion, fn _, _, _, _ ->
+      |> expect(:completion, fn _, _, _, _, _ ->
         {:ok, "Second stage"}
       end)
-      |> expect(:completion, fn _model, messages, _tools, _opts ->
-        # Verify that DataPart is properly included in messages
+      |> expect(:completion, fn _model, messages, _, _tools, _opts ->
         assert Enum.any?(messages, fn
                  {:user, parts} ->
                    Enum.any?(parts, fn

@@ -2,6 +2,9 @@ defmodule BeamMePrompty.AgentManager do
   @moduledoc """
   Manages the lifecycle of agent instances and their stages.
   """
+  import BeamMePrompty.Agent.Dsl.Part
+
+  alias BeamMePrompty.Agent.Executor
 
   @doc false
   def child_spec(opts) do
@@ -39,5 +42,12 @@ defmodule BeamMePrompty.AgentManager do
       {:via, PartitionSupervisor, {__MODULE__, agent}},
       {agent, opts}
     )
+  end
+
+  def send_message(pid_or_session_id, message) when is_part(message),
+    do: Executor.message_agent(pid_or_session_id, message)
+
+  def send_message(_, message) do
+    {:error, "Invalid message format: #{inspect(message)}"}
   end
 end

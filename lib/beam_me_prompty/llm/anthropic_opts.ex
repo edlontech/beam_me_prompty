@@ -28,7 +28,7 @@ defmodule BeamMePrompty.LLM.AnthropicOpts do
               Controls the randomness of the output. Use higher values for more creative responses, and lower values for more deterministic responses.
               """
             ],
-            key: [
+            api_key: [
               type: :string,
               doc: "Anthropic API key."
             ],
@@ -99,7 +99,7 @@ defmodule BeamMePrompty.LLM.AnthropicOpts do
         temperature: get_in(config, [:temperature]),
         top_p: get_in(config, [:top_p]),
         top_k: get_in(config, [:top_k]),
-        key: api_key(config.api_key),
+        api_key: api_key(config.api_key),
         thinking: get_in(config, [:thinking]),
         thinking_budget: get_in(config, [:thinking_budget]),
         tools: parse_dsl_tools(tools),

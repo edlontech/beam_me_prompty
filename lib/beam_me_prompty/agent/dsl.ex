@@ -106,7 +106,7 @@ defmodule BeamMePrompty.Agent.Dsl do
   typedstruct module: LLM do
     @moduledoc false
     field :model, String.t()
-    field :llm_client, {module(), keyword()}
+    field :llm_client, {module(), keyword()} | module()
     field :params, LLMParams.t() | nil
     field :messages, list(Message.t())
     field :tools, list(Tool.t()), default: []
@@ -213,7 +213,12 @@ defmodule BeamMePrompty.Agent.Dsl do
         type: {:list, :any}
       ],
       llm_client: [
-        type: {:behaviour, BeamMePrompty.LLM},
+        type:
+          {:or,
+           [
+             {:behaviour, BeamMePrompty.LLM},
+             {:tuple, [{:behaviour, BeamMePrompty.LLM}, :keyword_list]}
+           ]},
         required: true,
         doc: "The LLM client module to use."
       ]
@@ -274,6 +279,13 @@ defmodule BeamMePrompty.Agent.Dsl do
             | DataPart.t()
             | FunctionResultPart.t()
             | FunctionCallPart.t()
+
+    defguard is_part(part)
+             when is_struct(part, TextPart) or
+                    is_struct(part, FilePart) or
+                    is_struct(part, DataPart) or
+                    is_struct(part, FunctionResultPart) or
+                    is_struct(part, FunctionCallPart)
 
     @spec text_part(String.t()) :: TextPart.t()
     def text_part(text) do

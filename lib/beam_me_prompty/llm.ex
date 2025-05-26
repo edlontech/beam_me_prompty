@@ -19,7 +19,7 @@ defmodule BeamMePrompty.LLM do
   @type response :: binary() | function_call_request() | map()
 
   @typedoc "Options passed to the completion function."
-  @type completion_opts :: LLMParams.t() | keyword()
+  @type completion_opts :: LLMParams.t()
 
   @typedoc "Request from the LLM to execute a function."
   @type function_call_request :: %{
@@ -43,14 +43,15 @@ defmodule BeamMePrompty.LLM do
   @callback completion(
               model :: String.t(),
               messages :: [message()],
+              llm_params :: completion_opts(),
               tools :: [Tool.t()],
-              opts :: completion_opts()
+              opts :: keyword()
             ) ::
               {:ok, response} | {:error, any()}
 
   @doc """
   A convenience function to call the `completion/4` callback on a specific client module.
   """
-  def completion(client_module, model, messages, tools \\ [], opts \\ []),
-    do: client_module.completion(model, messages, tools, opts)
+  def completion(client_module, model, messages, llm_params, tools \\ [], opts \\ []),
+    do: client_module.completion(model, messages, llm_params, tools, opts)
 end

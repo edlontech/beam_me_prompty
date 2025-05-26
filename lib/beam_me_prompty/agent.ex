@@ -44,6 +44,8 @@ defmodule BeamMePrompty.Agent do
       extensions: [BeamMePrompty.Agent.Dsl]
     ]
 
+  alias BeamMePrompty.Agent.Executor
+
   @typedoc """
   Startup options for agents
 

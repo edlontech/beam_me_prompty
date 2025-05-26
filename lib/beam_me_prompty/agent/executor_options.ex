@@ -16,6 +16,10 @@ defmodule BeamMePrompty.Agent.ExecutorOptions do
               doc:
                 "A unique identifier for the agent executor instance. Used for logging and monitoring."
             ],
+            agent_state: [
+              type: {:in, [:stateful, :stateless]},
+              doc: "Whether the agent executor maintains state across executions. "
+            ],
             max_retries: [
               type: :non_neg_integer,
               default: 3,

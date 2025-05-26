@@ -177,6 +177,22 @@ defmodule BeamMePrompty.Agent.Executor do
   def get_results(pid_or_name, timeout \\ 5000),
     do: GenStateMachine.call(pid_or_name, :get_results, timeout)
 
+  def message_agent(pid, message) when is_pid(pid) do
+    do_send_message(pid, message)
+  end
+
+  def message_agent(session_id, message) do
+    session_id
+    |> executor_id()
+    |> do_send_message(message)
+  end
+
+  defp do_send_message(pid_or_session, message) do
+    message = {:user, [message]}
+
+    GenStateMachine.cast(pid_or_session, {:message, message})
+  end
+
   @doc """
   Executes an agent synchronously and returns the results.
 
@@ -241,7 +257,9 @@ defmodule BeamMePrompty.Agent.Executor do
     end
   end
 
-  # Replace poll_for_completion with wait_for_completion that handles EXIT messages
+  defp executor_id(session_id),
+    do: {:via, Registry, {:agents, session_id}}
+
   defp wait_for_completion(pid, ref, timeout) do
     end_time = System.monotonic_time(:millisecond) + timeout
 
@@ -303,7 +321,4 @@ defmodule BeamMePrompty.Agent.Executor do
         error
     end
   end
-
-  defp executor_id(session_id),
-    do: {:via, Registry, {:agents, session_id}}
 end

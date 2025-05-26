@@ -5,6 +5,7 @@ defmodule BeamMePrompty.LLM.GoogleGeminiTest do
 
   alias BeamMePrompty.Fixtures.GoogleGemini, as: GeminiFixtures
   alias BeamMePrompty.LLM.GoogleGemini
+  alias BeamMePrompty.Agent.Dsl.LLMParams
 
   describe "completion/4" do
     test "should return a valid completion response" do
@@ -19,8 +20,10 @@ defmodule BeamMePrompty.LLM.GoogleGeminiTest do
                    {:system, [text_part("You are a funny writter")]},
                    {:user, [text_part("Tell me a joke")]}
                  ],
+                 %LLMParams{
+                   api_key: "FAKE_KEY"
+                 },
                  [],
-                 key: "FAKE_KEY",
                  http_adapter: Req.Test
                )
 
@@ -39,8 +42,10 @@ defmodule BeamMePrompty.LLM.GoogleGeminiTest do
                    {:system, [text_part("You are a funny writter")]},
                    {:user, [text_part("Tell me a joke")]}
                  ],
+                 %LLMParams{
+                   api_key: "FAKE_KEY"
+                 },
                  [],
-                 key: "FAKE_KEY",
                  http_adapter: Req.Test
                )
 
@@ -59,8 +64,10 @@ defmodule BeamMePrompty.LLM.GoogleGeminiTest do
                    {:system, [text_part("You are a funny writter")]},
                    {:user, [text_part("Tell me a joke")]}
                  ],
+                 %LLMParams{
+                   api_key: "FAKE_KEY"
+                 },
                  [],
-                 key: "FAKE_KEY",
                  http_adapter: Req.Test
                )
 
