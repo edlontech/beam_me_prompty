@@ -36,13 +36,19 @@ defmodule BeamMePrompty.Agent.Dsl do
   alias BeamMePrompty.Tool
 
   typedstruct module: TextPart do
-    @moduledoc false
+    @moduledoc """
+    Represents a Text Part of a LLM Message.
+    """
+
     field :type, :text
     field :text, String.t()
   end
 
   typedstruct module: FilePart do
-    @moduledoc false
+    @moduledoc """
+    Represents a File Part of a LLM Message.
+    """
+
     field :type, :file
 
     field :file, %{
@@ -54,20 +60,31 @@ defmodule BeamMePrompty.Agent.Dsl do
   end
 
   typedstruct module: DataPart do
-    @moduledoc false
+    @moduledoc """
+    Represents a Data Part of a LLM Message.
+
+    Data parts can be any serializable map structure, they are usually sent as a plain text json-string to the LLM.
+    """
+
     field :type, :data
     field :data, map()
   end
 
   typedstruct module: FunctionResultPart do
-    @moduledoc false
+    @moduledoc """
+    Represents the result of a function call in a LLM Message.
+    """
+
     field :id, String.t() | nil
     field :name, String.t() | atom()
     field :result, any()
   end
 
   typedstruct module: FunctionCallPart do
-    @moduledoc false
+    @moduledoc """
+    Represents a LLM function call request.
+    """
+
     field :function_call, %{
       optional(:id) => String.t(),
       optional(:name) => String.t(),
@@ -76,7 +93,10 @@ defmodule BeamMePrompty.Agent.Dsl do
   end
 
   typedstruct module: Message do
-    @moduledoc false
+    @moduledoc """
+    Represents a message in the LLM conversation history.
+    """
+
     field :role, BeamMePrompty.Agent.Dsl.role()
 
     field :content,
@@ -90,7 +110,10 @@ defmodule BeamMePrompty.Agent.Dsl do
   end
 
   typedstruct module: LLMParams do
-    @moduledoc false
+    @moduledoc """
+    Represents the parameters for configuring an LLM model.
+    """
+
     field :max_tokens, integer() | nil
     field :temperature, float() | nil
     field :top_p, float() | nil
@@ -104,7 +127,10 @@ defmodule BeamMePrompty.Agent.Dsl do
   end
 
   typedstruct module: LLM do
-    @moduledoc false
+    @moduledoc """
+    Represents a Language Model (LLM) configuration within a stage.
+    """
+
     field :model, String.t()
     field :llm_client, {module(), keyword()} | module()
     field :params, LLMParams.t() | nil
@@ -113,7 +139,10 @@ defmodule BeamMePrompty.Agent.Dsl do
   end
 
   typedstruct module: Stage do
-    @moduledoc false
+    @moduledoc """
+    Represents a processing stage in the LLM agent.
+    """
+
     field :name, atom()
     field :depends_on, list(atom()) | nil
     field :llm, LLM.t() | nil
