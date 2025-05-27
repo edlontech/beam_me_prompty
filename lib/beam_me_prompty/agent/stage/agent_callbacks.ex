@@ -32,26 +32,24 @@ defmodule BeamMePrompty.Agent.Stage.AgentCallbacks do
   end
 
   def call_tool_call(agent_module, tool_name, tool_args, agent_state) do
-    try do
-      case agent_module.handle_tool_call(tool_name, tool_args, agent_state) do
-        :ok ->
-          {:ok, agent_state}
+    case agent_module.handle_tool_call(tool_name, tool_args, agent_state) do
+      :ok ->
+        {:ok, agent_state}
 
-        {:ok, new_state} ->
-          {:ok, new_state}
+      {:ok, new_state} ->
+        {:ok, new_state}
 
-        {:error, _} ->
-          {:error, agent_state}
+      {:error, _} ->
+        {:error, agent_state}
 
-        other ->
-          Logger.warning("[BeamMePrompty] Unexpected handle_tool_call result: #{inspect(other)}")
-          {:ok, agent_state}
-      end
-    rescue
-      e ->
-        Logger.warning("[BeamMePrompty] Agent callback handle_tool_call failed: #{inspect(e)}")
+      other ->
+        Logger.warning("[BeamMePrompty] Unexpected handle_tool_call result: #{inspect(other)}")
         {:ok, agent_state}
     end
+  rescue
+    e ->
+      Logger.warning("[BeamMePrompty] Agent callback handle_tool_call failed: #{inspect(e)}")
+      {:ok, agent_state}
   end
 
   @doc """
@@ -62,29 +60,25 @@ defmodule BeamMePrompty.Agent.Stage.AgentCallbacks do
   end
 
   def call_tool_result(agent_module, tool_name, tool_result, agent_state) do
-    try do
-      case agent_module.handle_tool_result(tool_name, tool_result, agent_state) do
-        :ok ->
-          {:ok, agent_state}
+    case agent_module.handle_tool_result(tool_name, tool_result, agent_state) do
+      :ok ->
+        {:ok, agent_state}
 
-        {:ok, new_state} ->
-          {:ok, new_state}
+      {:ok, new_state} ->
+        {:ok, new_state}
 
-        {:error, _err} ->
-          {:error, agent_state}
+      {:error, _err} ->
+        {:error, agent_state}
 
-        other ->
-          Logger.warning(
-            "[BeamMePrompty] Unexpected handle_tool_result result: #{inspect(other)}"
-          )
+      other ->
+        Logger.warning("[BeamMePrompty] Unexpected handle_tool_result result: #{inspect(other)}")
 
-          {:ok, agent_state}
-      end
-    rescue
-      e ->
-        Logger.warning("[BeamMePrompty] Agent callback handle_tool_result failed: #{inspect(e)}")
         {:ok, agent_state}
     end
+  rescue
+    e ->
+      Logger.warning("[BeamMePrompty] Agent callback handle_tool_result failed: #{inspect(e)}")
+      {:ok, agent_state}
   end
 
   @doc """

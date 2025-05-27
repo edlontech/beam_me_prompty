@@ -9,12 +9,32 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
   - Determining when responses contain tool calls vs final content
   """
 
+  use TypedStruct
+
   require Logger
 
   alias BeamMePrompty.Agent.Stage.Config
   alias BeamMePrompty.Agent.Stage.MessageManager
   alias BeamMePrompty.Agent.Stage.ToolExecutor
   alias BeamMePrompty.Validator
+
+  typedstruct module: Context do
+    @moduledoc """
+    Context struct for LLM processing operations.
+
+    Encapsulates all the parameters needed for LLM interactions,
+    making function signatures cleaner and easier to maintain.
+    """
+
+    field :llm_client, any(), enforce: true
+    field :model, String.t(), enforce: true
+    field :available_tools, list(), default: []
+    field :llm_params, map(), enforce: true
+    field :message_history, list(), default: []
+    field :remaining_iterations, non_neg_integer(), default: 5
+    field :agent_module, module() | nil, default: nil
+    field :current_agent_state, map(), default: %{}
+  end
 
   @doc """
   Processes LLM configuration and initiates LLM interactions if valid.
@@ -27,34 +47,45 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
         current_agent_state
       )
       when is_map(config) do
-    if config.model && config.llm_client do
-      llm_params =
-        case config.params do
-          [p | _] -> p
-          _ -> %BeamMePrompty.Agent.Dsl.LLMParams{}
-        end
+    case validate_llm_config(config) do
+      {:ok, validated_config} ->
+        llm_params = extract_llm_params(validated_config.params)
+        tools = Enum.map(validated_config.tools, & &1.tool_info())
 
-      tools = Enum.map(config.tools, & &1.tool_info())
+        messages =
+          MessageManager.prepare_messages_for_llm(
+            validated_config,
+            input,
+            initial_messages_history
+          )
 
-      messages = MessageManager.prepare_messages_for_llm(config, input, initial_messages_history)
+        context = %Context{
+          llm_client: validated_config.llm_client,
+          model: validated_config.model,
+          available_tools: tools,
+          llm_params: llm_params,
+          message_history: initial_messages_history,
+          remaining_iterations: Config.default_max_tool_iterations(),
+          agent_module: agent_module,
+          current_agent_state: current_agent_state
+        }
 
-      process_llm_interactions(
-        config.llm_client,
-        config.model,
-        tools,
-        llm_params,
-        initial_messages_history,
-        messages,
-        Config.default_max_tool_iterations(),
-        agent_module,
-        current_agent_state
-      )
-    else
-      {:ok, %{}, initial_messages_history, current_agent_state}
+        log_llm_interaction("starting_llm_processing", %{
+          model: context.model,
+          tool_count: length(tools),
+          message_count: length(messages)
+        })
+
+        process_llm_interactions(context, messages)
+
+      {:error, reason} ->
+        log_llm_interaction("config_validation_failed", %{reason: reason})
+        {:ok, %{}, initial_messages_history, current_agent_state}
     end
   end
 
   def maybe_call_llm([], _input, current_messages, _agent_module, current_agent_state) do
+    log_llm_interaction("no_llm_config", %{})
     {:ok, %{}, current_messages, current_agent_state}
   end
 
@@ -65,6 +96,7 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
         _agent_module,
         current_agent_state
       ) do
+    log_llm_interaction("unhandled_config_format", %{})
     {:ok, %{}, current_messages, current_agent_state}
   end
 
@@ -72,107 +104,71 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
   Handles the recursive LLM interaction loop with tool calling support.
   """
   def process_llm_interactions(
-        _llm_client,
-        _model,
-        _tools,
-        _params,
-        acc_messages,
-        _curr_req_msgs,
-        # Max iterations reached
-        0,
-        _agent_module,
-        current_agent_state
+        %Context{remaining_iterations: 0} = context,
+        _current_request_messages
       ) do
-    {:error, :max_tool_iterations_reached, acc_messages, current_agent_state}
+    log_llm_interaction("max_iterations_reached", %{iterations: 0})
+    {:error, :max_tool_iterations_reached, context.message_history, context.current_agent_state}
   end
 
-  def process_llm_interactions(
-        llm_client,
-        model,
-        available_tools,
-        llm_params,
-        accumulated_messages,
-        current_request_messages,
-        remaining_iterations,
-        agent_module,
-        current_agent_state
-      ) do
+  def process_llm_interactions(%Context{} = context, current_request_messages) do
     messages_to_send_to_llm =
-      MessageManager.combine_messages_for_llm(accumulated_messages, current_request_messages)
+      MessageManager.combine_messages_for_llm(context.message_history, current_request_messages)
 
-    {llm_client, opts} = if is_tuple(llm_client), do: llm_client, else: {llm_client, []}
+    log_llm_interaction("sending_request", %{
+      message_count: length(messages_to_send_to_llm),
+      remaining_iterations: context.remaining_iterations
+    })
+
+    {llm_client, opts} = normalize_llm_client(context.llm_client)
 
     case BeamMePrompty.LLM.completion(
            llm_client,
-           model,
+           context.model,
            messages_to_send_to_llm,
-           llm_params,
-           available_tools,
+           context.llm_params,
+           context.available_tools,
            opts
          ) do
       {:ok, llm_response_content} ->
-        case validate_structured_response(llm_response_content, llm_params) do
-          {:ok, validated_response} ->
-            assistant_response_message = MessageManager.format_response(validated_response)
-
-            history_after_llm_response =
-              MessageManager.append_assistant_response(
-                messages_to_send_to_llm,
-                assistant_response_message
-              )
-
-            handle_llm_response(
-              validated_response,
-              llm_client,
-              model,
-              available_tools,
-              llm_params,
-              history_after_llm_response,
-              remaining_iterations,
-              agent_module,
-              current_agent_state
-            )
-
-          {:error, validation_error} ->
-            {:error, validation_error, accumulated_messages, current_agent_state}
-        end
+        handle_llm_completion_success(
+          context,
+          llm_response_content,
+          messages_to_send_to_llm
+        )
 
       {:error, reason} ->
-        {:error, reason, accumulated_messages, current_agent_state}
+        log_llm_interaction("completion_failed", %{reason: reason})
+        {:error, reason, context.message_history, context.current_agent_state}
     end
   end
 
   @doc """
   Processes LLM response and determines if it contains tool calls or final content.
   """
-  def handle_llm_response(
-        llm_response_content,
-        llm_client,
-        model,
-        available_tools,
-        llm_params,
-        message_history,
-        remaining_iterations,
-        agent_module,
-        current_agent_state
-      ) do
+  def handle_llm_response(%Context{} = context, llm_response_content) do
     case function_call_response(llm_response_content) do
       {:ok, final_llm_content} ->
-        {:ok, final_llm_content, message_history, current_agent_state}
+        log_llm_interaction("final_response", %{content_type: typeof(final_llm_content)})
+        {:ok, final_llm_content, context.message_history, context.current_agent_state}
 
       {:tool, tool_function_call_part} ->
+        log_llm_interaction("tool_call_detected", %{
+          tool_name: get_in(tool_function_call_part, [:function_call, :name])
+        })
+
         tool_info = ToolExecutor.extract_tool_info(tool_function_call_part)
 
         case ToolExecutor.process_tool_call(
                tool_info,
-               available_tools,
-               llm_client,
-               model,
-               llm_params,
-               message_history,
-               remaining_iterations,
-               agent_module,
-               current_agent_state
+               context.available_tools,
+               context.llm_client,
+               context.model,
+               context.llm_params,
+               context.message_history,
+               context.remaining_iterations,
+               context.agent_module,
+               context.current_agent_state
              ) do
           {
             :continue_llm_interactions,
@@ -186,17 +182,19 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
             agent_module,
             updated_agent_state
           } ->
-            process_llm_interactions(
-              llm_client,
-              model,
-              available_tools,
-              llm_params,
-              message_history,
-              next_request_messages,
-              remaining_iterations,
-              agent_module,
-              updated_agent_state
-            )
+            updated_context = %Context{
+              context
+              | llm_client: llm_client,
+                model: model,
+                available_tools: available_tools,
+                llm_params: llm_params,
+                message_history: message_history,
+                remaining_iterations: remaining_iterations,
+                agent_module: agent_module,
+                current_agent_state: updated_agent_state
+            }
+
+            process_llm_interactions(updated_context, next_request_messages)
         end
     end
   end
@@ -238,6 +236,59 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
 
             {:error, validation_error}
         end
+    end
+  end
+
+  # --- Private Helper Functions ---
+
+  defp handle_llm_completion_success(context, llm_response_content, messages_to_send_to_llm) do
+    case validate_structured_response(llm_response_content, context.llm_params) do
+      {:ok, validated_response} ->
+        log_llm_interaction("response_validated", %{response_type: typeof(validated_response)})
+
+        assistant_response_message = MessageManager.format_response(validated_response)
+
+        history_after_llm_response =
+          MessageManager.append_assistant_response(
+            messages_to_send_to_llm,
+            assistant_response_message
+          )
+
+        updated_context = %Context{context | message_history: history_after_llm_response}
+        handle_llm_response(updated_context, validated_response)
+
+      {:error, validation_error} ->
+        log_llm_interaction("validation_failed", %{error: validation_error})
+        {:error, validation_error, context.message_history, context.current_agent_state}
+    end
+  end
+
+  defp normalize_llm_client(llm_client) do
+    if is_tuple(llm_client), do: llm_client, else: {llm_client, []}
+  end
+
+  defp log_llm_interaction(event, metadata) do
+    Logger.debug("[BeamMePrompty] LLMProcessor: #{event}")
+    Logger.debug("#{inspect(metadata)}")
+  end
+
+  defp typeof(value) when is_binary(value), do: "string"
+  defp typeof(value) when is_map(value), do: "map"
+  defp typeof(value) when is_list(value), do: "list"
+  defp typeof(_value), do: "other"
+
+  defp validate_llm_config(config) do
+    cond do
+      is_nil(config.model) -> {:error, :missing_model}
+      is_nil(config.llm_client) -> {:error, :missing_llm_client}
+      true -> {:ok, config}
+    end
+  end
+
+  defp extract_llm_params(params) do
+    case params do
+      [p | _] -> p
+      _ -> %BeamMePrompty.Agent.Dsl.LLMParams{}
     end
   end
 end
