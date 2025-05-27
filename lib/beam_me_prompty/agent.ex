@@ -119,6 +119,11 @@ defmodule BeamMePrompty.Agent do
       Retrieves the Agent DSL information.
       """
       def stages, do: Dsl.Info.agent(__MODULE__)
+
+      @doc """
+      Retrieves the agent configuration options.
+      """
+      def agent_config, do: BeamMePrompty.Agent.Dsl.Info.agent_options(__MODULE__)
     end
   end
 end

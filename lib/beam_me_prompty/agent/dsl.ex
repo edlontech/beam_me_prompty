@@ -286,7 +286,13 @@ defmodule BeamMePrompty.Agent.Dsl do
     entities: [
       @stage_entity
     ],
-    schema: [],
+    schema: [
+      agent_state: [
+        type: {:one_of, [:stateful, :stateless]},
+        default: :stateless,
+        doc: "Indicates whether the agent maintains a state across calls"
+      ]
+    ],
     describe: "Defines an LLM agent with one or more stages."
   }
 

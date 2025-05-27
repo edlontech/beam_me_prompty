@@ -51,15 +51,13 @@ defmodule BeamMePrompty.Agent.Internals do
   alias BeamMePrompty.Errors
 
   @impl true
-  def init({session_id, dag, input, initial_agent_state, opts, agent_module_impl}) do
-    agent_type = Keyword.get(opts, :agent_state, :stateless)
-
+  def init({session_id, dag, input, initial_agent_state, opts, agent_module}) do
     Logger.debug(
-      "[BeamMePrompty] Agent [#{inspect(agent_module_impl)}](sid: #{inspect(session_id)}) initializing..."
+      "[BeamMePrompty] Agent [#{inspect(agent_module)}](sid: #{inspect(session_id)}) initializing..."
     )
 
     {init_status, new_agent_state_after_init} =
-      agent_module_impl.handle_init(dag, initial_agent_state)
+      agent_module.handle_init(dag, initial_agent_state)
 
     current_agent_state =
       case init_status do
@@ -76,12 +74,12 @@ defmodule BeamMePrompty.Agent.Internals do
             case StagesSupervisor.start_stage_worker(
                    sup_pid,
                    session_id,
-                   agent_module_impl,
+                   agent_module,
                    node_name
                  ) do
               {:ok, stage_pid} ->
                 Logger.debug(
-                  "[BeamMePrompty] Agent [#{inspect(agent_module_impl)}](sid: #{inspect(session_id)}): Started stage worker for #{node_name} (PID: #{inspect(stage_pid)})"
+                  "[BeamMePrompty] Agent [#{inspect(agent_module)}](sid: #{inspect(session_id)}): Started stage worker for #{node_name} (PID: #{inspect(stage_pid)})"
                 )
 
                 {node_name, stage_pid}
@@ -91,12 +89,14 @@ defmodule BeamMePrompty.Agent.Internals do
             end
           end)
 
+        agent_config = agent_module.agent_config()
+
         data = %__MODULE__{
-          agent_type: agent_type,
+          agent_type: agent_config.agent_state,
           session_id: session_id,
           dag: dag,
           opts: opts,
-          agent_module: agent_module_impl,
+          agent_module: agent_module,
           global_input: input,
           initial_state: initial_agent_state,
           current_state: current_agent_state,
