@@ -249,7 +249,7 @@ defmodule BeamMePrompty.Agent.Executor do
 
     with :ok <- DAG.validate(dag),
          {:ok, opts} <- ExecutorOptions.validate(opts) do
-      init = {dag, input, state, opts, module}
+      init = {session_id, dag, input, state, opts, module}
 
       GenStateMachine.start_link(BeamMePrompty.Agent.Internals, init,
         name: executor_id(session_id)

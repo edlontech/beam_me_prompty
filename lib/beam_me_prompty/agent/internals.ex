@@ -20,10 +20,13 @@ defmodule BeamMePrompty.Agent.Internals do
   """
   use GenStateMachine, callback_mode: :state_functions
 
+  require Logger
+
   @type agent_type :: :stateful | :stateless
 
   defstruct [
     :agent_type,
+    :session_id,
     :dag,
     :agent_module,
     :global_input,
@@ -48,8 +51,12 @@ defmodule BeamMePrompty.Agent.Internals do
   alias BeamMePrompty.Errors
 
   @impl true
-  def init({dag, input, initial_agent_state, opts, agent_module_impl}) do
+  def init({session_id, dag, input, initial_agent_state, opts, agent_module_impl}) do
     agent_type = Keyword.get(opts, :agent_state, :stateless)
+
+    Logger.debug(
+      "[BeamMePrompty] Agent [#{inspect(agent_module_impl)}](sid: #{inspect(session_id)}) initializing..."
+    )
 
     {init_status, new_agent_state_after_init} =
       agent_module_impl.handle_init(dag, initial_agent_state)
@@ -66,8 +73,17 @@ defmodule BeamMePrompty.Agent.Internals do
         stage_workers =
           Enum.into(dag.nodes, %{}, fn {node_name, _node_definition} ->
             # credo:disable-for-next-line Credo.Check.Refactor.Nesting
-            case StagesSupervisor.start_stage_worker(sup_pid, node_name) do
+            case StagesSupervisor.start_stage_worker(
+                   sup_pid,
+                   session_id,
+                   agent_module_impl,
+                   node_name
+                 ) do
               {:ok, stage_pid} ->
+                Logger.debug(
+                  "[BeamMePrompty] Agent [#{inspect(agent_module_impl)}](sid: #{inspect(session_id)}): Started stage worker for #{node_name} (PID: #{inspect(stage_pid)})"
+                )
+
                 {node_name, stage_pid}
 
               {:error, reason} ->
@@ -77,6 +93,7 @@ defmodule BeamMePrompty.Agent.Internals do
 
         data = %__MODULE__{
           agent_type: agent_type,
+          session_id: session_id,
           dag: dag,
           opts: opts,
           agent_module: agent_module_impl,
@@ -104,8 +121,16 @@ defmodule BeamMePrompty.Agent.Internals do
   def waiting_for_plan(:internal, :plan, data) do
     ready_nodes_from_dag = DAG.find_ready_nodes(data.dag, data.results)
 
+    Logger.debug(
+      "[BeamMePrompty] Agent [#{inspect(data.agent_module)}](sid: #{inspect(data.session_id)}) #{inspect(ready_nodes_from_dag)}, Completed: #{map_size(data.results)}/#{map_size(data.dag.nodes)}"
+    )
+
     {plan_status, planned_nodes, new_agent_state_after_plan} =
       data.agent_module.handle_plan(ready_nodes_from_dag, data.current_state)
+
+    Logger.debug(
+      "[BeamMePrompty] Agent [#{inspect(data.agent_module)}](sid: #{inspect(data.session_id)}) Plan callback result - Status: #{inspect(plan_status)}, Planned nodes: #{inspect(planned_nodes)}"
+    )
 
     current_agent_state_after_plan_callback =
       case plan_status do
@@ -383,9 +408,9 @@ defmodule BeamMePrompty.Agent.Internals do
     handle_error({:error, error_info_tuple}, data_for_error_handling)
   end
 
-  def awaiting_stage_results(event_type, event_content, _data) do
+  def awaiting_stage_results(event_type, event_content, data) do
     Logger.warning(
-      "Unexpected event in awaiting_stage_results: #{inspect(event_type)} - #{inspect(event_content)}"
+      "[BeamMePrompty] Agent [#{inspect(data.agent_module)}] (sid: #{inspect(data.session_id)})  Unexpected event in awaiting_stage_results: #{inspect(event_type)} - #{inspect(event_content)}"
     )
 
     :keep_state_and_data
@@ -397,6 +422,10 @@ defmodule BeamMePrompty.Agent.Internals do
 
   def idle(:cast, {:message, message}, data) do
     entry_point_stage = find_entry_point_stage(data.dag.nodes)
+
+    Logger.debug(
+      "[BeamMePrompty] Agent [#{inspect(data.agent_module)}] (sid: #{inspect(data.session_id)}) received message: #{inspect(message)}"
+    )
 
     if entry_point_stage do
       stage_pid = Map.get(data.stage_workers, entry_point_stage)
@@ -510,9 +539,7 @@ defmodule BeamMePrompty.Agent.Internals do
     end
   end
 
-  # Helper function to find entry point stage
   defp find_entry_point_stage(nodes) do
-    # First, look for explicitly marked entry point
     entry_point =
       Enum.find(nodes, fn {_name, node_def} ->
         Map.get(node_def, :entry_point, false)
@@ -523,7 +550,6 @@ defmodule BeamMePrompty.Agent.Internals do
         name
 
       nil ->
-        # Fallback: use first stage in topological order
         nodes |> Map.keys() |> List.first()
     end
   end

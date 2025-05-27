@@ -22,6 +22,8 @@ defmodule BeamMePrompty.Agent.Stage do
 
   use GenStateMachine, callback_mode: :state_functions
 
+  require Logger
+
   alias BeamMePrompty.Agent.Dsl.DataPart
   alias BeamMePrompty.Agent.Dsl.FunctionCallPart
   alias BeamMePrompty.Agent.Dsl.FunctionResultPart
@@ -32,6 +34,7 @@ defmodule BeamMePrompty.Agent.Stage do
 
   defstruct [
     :stage_name,
+    :session_id,
     :messages,
     :tool_responses,
     :agent_module,
@@ -39,12 +42,12 @@ defmodule BeamMePrompty.Agent.Stage do
   ]
 
   @doc false
-  def start_link(stage_name) do
-    GenStateMachine.start_link(__MODULE__, stage_name, [])
+  def start_link(stage) do
+    GenStateMachine.start_link(__MODULE__, stage, [])
   end
 
   @impl true
-  def init(stage_name) do
+  def init({stage_name, session_id, agent_module}) do
     actual_stage_name =
       case stage_name do
         {s_name} when is_atom(s_name) or is_binary(s_name) -> s_name
@@ -55,7 +58,8 @@ defmodule BeamMePrompty.Agent.Stage do
       stage_name: actual_stage_name,
       messages: [],
       tool_responses: [],
-      agent_module: nil,
+      session_id: session_id,
+      agent_module: agent_module,
       current_agent_state: %{}
     }
 
@@ -65,6 +69,10 @@ defmodule BeamMePrompty.Agent.Stage do
   def idle(:cast, {:execute, node_name, node_def, node_ctx, caller_pid}, data) do
     agent_module_from_ctx = node_ctx[:agent_module]
     agent_state_from_ctx = node_ctx[:current_agent_state]
+
+    Logger.debug(
+      "[BeamMePrompty] Agent [#{inspect(data.agent_module)}](sid: #{inspect(data.session_id)}) running node [#{inspect(node_name)}]"
+    )
 
     data_with_agent_context = %{
       data
@@ -137,6 +145,10 @@ defmodule BeamMePrompty.Agent.Stage do
   # --- Private Helper Functions for Stage Execution ---
 
   defp do_execute_stage(stage_node_def, exec_context, stage_data) do
+    Logger.debug("""
+    [BeamMePrompty] Agent [#{inspect(stage_data.agent_module)}](sid: #{inspect(stage_data.session_id)}) Stage [#{inspect(stage_data.stage_name)}] executing.
+    """)
+
     global_input = exec_context[:global_input] || %{}
     dependency_results = exec_context[:dependency_results] || %{}
     inputs_for_llm = Map.merge(global_input, dependency_results)
@@ -149,6 +161,10 @@ defmodule BeamMePrompty.Agent.Stage do
            stage_data.current_agent_state
          ) do
       {:ok, llm_result, updated_messages_history, final_agent_state_after_llm} ->
+        Logger.debug("""
+        [BeamMePrompty] Agent [#{inspect(stage_data.agent_module)}](sid: #{inspect(stage_data.session_id)}) Stage [#{inspect(stage_data.stage_name)}] finished.
+        """)
+
         updated_stage_data = %{
           stage_data
           | messages: updated_messages_history,
