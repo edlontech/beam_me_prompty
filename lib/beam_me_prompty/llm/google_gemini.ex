@@ -140,7 +140,7 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
       |> Map.reject(fn {_k, v} -> is_nil(v) end)
 
     generation_config =
-      if opts[:response_schema] do
+      if llm_params[:response_schema] do
         %{
           generation_config
           | response_mime_type: "application/json"
@@ -152,7 +152,7 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
     base_payload = Map.merge(prepare_messages(messages), %{generation_config: generation_config})
 
     payload =
-      if tools_config = opts[:tools] do
+      if tools_config = llm_params[:tools] do
         Map.put(base_payload, :tools, [Map.new(tools_config)])
       else
         base_payload

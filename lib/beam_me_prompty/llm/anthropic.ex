@@ -108,7 +108,7 @@ defmodule BeamMePrompty.LLM.Anthropic do
         %{}
       end
 
-    tooling = tool_choice(llm_params[:tools])
+    tooling = prepare_anthropic_tools_payload(llm_params[:tools])
 
     payload =
       payload_base
@@ -140,11 +140,12 @@ defmodule BeamMePrompty.LLM.Anthropic do
   defp parse_response({:ok, %Req.Response{status: 500, body: body}}),
     do: {:error, UnexpectedLLMResponse.exception(module: __MODULE__, status: 500, cause: body)}
 
-  defp tool_choice(nil), do: %{}
+  defp prepare_anthropic_tools_payload(nil), do: %{}
 
-  defp tool_choice(tools) do
-    tools =
-      Enum.map(tools[:function_declarations], fn function_declaration ->
+  defp prepare_anthropic_tools_payload(%{function_declarations: declarations})
+       when is_list(declarations) and declarations != [] do
+    formatted_tools =
+      Enum.map(declarations, fn function_declaration ->
         %{
           name: function_declaration.name,
           description: function_declaration.description,
@@ -152,8 +153,10 @@ defmodule BeamMePrompty.LLM.Anthropic do
         }
       end)
 
-    %{tools: tools}
+    %{tools: formatted_tools}
   end
+
+  defp prepare_anthropic_tools_payload(_), do: %{}
 
   defp get_content(%{"content" => content_list}), do: Enum.map(content_list, &parse_content/1)
 
@@ -163,16 +166,6 @@ defmodule BeamMePrompty.LLM.Anthropic do
         id: content["id"],
         name: content["name"],
         arguments: content["input"]
-      }
-    }
-  end
-
-  defp parse_content(%{"type" => "tool_result"} = content) do
-    %{
-      function_result: %{
-        tool_use_id: content["tool_use_id"],
-        name: content["name"],
-        content: content["content"]
       }
     }
   end
@@ -254,7 +247,7 @@ defmodule BeamMePrompty.LLM.Anthropic do
           ""
       end)
       |> Enum.reject(&(&1 == ""))
-      |> Enum.join("\n")
+      |> Enum.join("")
       |> case do
         "" -> nil
         s -> s
@@ -268,6 +261,7 @@ defmodule BeamMePrompty.LLM.Anthropic do
           case role do
             :user -> "user"
             :assistant -> "assistant"
+            # Unknown roles are skipped
             _ -> nil
           end
 
@@ -288,22 +282,18 @@ defmodule BeamMePrompty.LLM.Anthropic do
   end
 
   defp format_role_messages(role, parts) when is_list(parts) do
-    formatted_parts =
-      Enum.flat_map(parts, fn
-        parts_list when is_list(parts_list) ->
-          Enum.map(parts_list, &format_dsl_part/1) |> Enum.reject(&is_nil/1)
+    formatted_api_content_blocks =
+      parts
+      |> Enum.map(&format_dsl_part/1)
+      |> Enum.reject(&is_nil/1)
 
-        part ->
-          case format_dsl_part(part) do
-            nil -> []
-            formatted -> [formatted]
-          end
-      end)
-
-    if Enum.empty?(formatted_parts) do
+    # If all parts for this role were nil (e.g., unsupported types) or the initial list was empty,
+    # then formatted_api_content_blocks will be empty. In this case, we don't create a message
+    # for this role, effectively skipping it.
+    if Enum.empty?(formatted_api_content_blocks) do
       []
     else
-      [%{role: role, content: formatted_parts}]
+      [%{role: role, content: formatted_api_content_blocks}]
     end
   end
 end

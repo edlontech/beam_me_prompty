@@ -1,11 +1,30 @@
 defmodule BeamMePrompty.Errors.ValidationError do
   @moduledoc """
-  Error raised when validation fails in the BeamMePrompty system.
+  Error raised when input data fails validation checks within the BeamMePrompty system.
 
-  This error is classified as a `:framework` error, indicating it originates
-  from the framework itself rather than from invalid input or external systems.
+  This error indicates that the provided data does not meet the required criteria
+  or constraints. It is classified as an `:invalid` error.
+
+  ## Fields
+
+    * `:cause` - Describes the reason for the validation failure. This can be a
+      simple string, a map with structured error details (e.g., field, rule, message),
+      or a keyword list. It may also contain error details from underlying validation
+      libraries.
+
+  ## Examples
+
+  Creating an error with a simple cause:
+
+      %BeamMePrompty.Errors.ValidationError{cause: "Input 'email' is not valid."}
+
+  Creating an error with a structured cause:
+
+      %BeamMePrompty.Errors.ValidationError{
+        cause: %{field: :email, rule: :format, message: "is invalid"}
+      }
   """
-  use Splode.Error, fields: [:cause], class: :framework
+  use Splode.Error, fields: [:cause], class: BeamMePrompty.Errors.Invalid
 
   @doc false
   def message(%{cause: cause}) do

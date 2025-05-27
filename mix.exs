@@ -9,6 +9,7 @@ defmodule BeamMePrompty.MixProject do
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
+      aliases: aliases(),
       description: description(),
       package: package(),
       dialyzer: [
@@ -38,6 +39,10 @@ defmodule BeamMePrompty.MixProject do
     ]
   end
 
+  def cli do
+    [preferred_envs: ["test.integration": :test]]
+  end
+
   defp deps do
     [
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
@@ -58,6 +63,15 @@ defmodule BeamMePrompty.MixProject do
       {:spark, "~> 2.2.55"},
       {:splode, "~> 0.2"},
       {:typedstruct, "~> 0.5.3"}
+    ]
+  end
+
+  defp aliases do
+    [
+      test: ["test --exclude integration"],
+      "test.integration": [
+        "test --only integration"
+      ]
     ]
   end
 

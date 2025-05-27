@@ -177,6 +177,18 @@ defmodule BeamMePrompty.Agent.Executor do
   def get_results(pid_or_name, timeout \\ 5000),
     do: GenStateMachine.call(pid_or_name, :get_results, timeout)
 
+  @doc """
+  Sends a message to the agent's underlying `GenStateMachine`.
+
+  This function handles two cases for the `pid_or_session_id` argument:
+  - If a PID is provided, the message is sent directly to that process.
+  - If a session ID (any other term) is provided, it's resolved to a
+    process name using `{:via, Registry, {:agents, session_id}}`
+    before sending the message.
+
+  The message is wrapped in a `{:user, [message]}` tuple before being cast.
+  """
+  @spec message_agent(pid() | reference(), BeamMePrompty.Agent.Dsl.Part.parts()) :: :ok
   def message_agent(pid, message) when is_pid(pid) do
     do_send_message(pid, message)
   end

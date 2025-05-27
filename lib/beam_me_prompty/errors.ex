@@ -19,6 +19,9 @@ defmodule BeamMePrompty.Errors do
     ],
     unknown_error: BeamMePrompty.Errors.Unknown.Unknown
 
-  @doc false
-  def error_classes(), do: @error_classes
+  @doc """
+  Returns the map of error classes registered with Splode.
+  This is typically for internal use or debugging.
+  """
+  def registered_error_classes, do: @error_classes
 end

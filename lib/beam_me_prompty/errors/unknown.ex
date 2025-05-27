@@ -15,6 +15,10 @@ defmodule BeamMePrompty.Errors.Unknown do
     This error represents a completely unclassified error and serves as the default
     error type for the error handling system. Any uncaught exceptions or errors that
     can't be classified will typically be converted to this error type.
+
+    Typically, this error would be created with a map containing an `:error` key:
+
+        %BeamMePrompty.Errors.Unknown.Unknown{error: "Something unexpected happened"}
     """
 
     use Splode.Error, class: :unknown

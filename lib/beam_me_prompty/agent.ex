@@ -100,20 +100,20 @@ defmodule BeamMePrompty.Agent do
       Runs the agent synchronously and waits for completion.
 
       ## Parameters
-        * `input` - Global input data for the agent (optional, defaults to empty map)
-        * `state` - The initial state of the agent (optional, defaults to empty map)
-        * `opts` - Additional options (see `start_link/4`)
-        * `timeout` - Timeout in milliseconds (optional, defaults to 15_000 ms)
+        * `input` - Global input data for the agent (optional, defaults to an empty map).
+        * `initial_state` - The initial state of the agent (optional, defaults to an empty map).
+        * `opts` - Additional options (see `start_link/4`) (optional, defaults to an empty list).
+        * `timeout` - Timeout in milliseconds (optional, defaults to 15_000 ms).
       """
       @spec run_sync(
               input :: map(),
-              state :: map(),
+              initial_state :: map(),
               opts :: keyword(),
               timeout :: integer()
             ) ::
               {:ok, any()} | {:error, any()}
-      def run_sync(input, state \\ %{}, opts \\ [], timeout \\ 15_000),
-        do: Executor.execute(__MODULE__, input, state, opts, timeout)
+      def run_sync(input \\ %{}, initial_state \\ %{}, opts \\ [], timeout \\ 15_000),
+        do: Executor.execute(__MODULE__, input, initial_state, opts, timeout)
 
       @doc """
       Retrieves the Agent DSL information.

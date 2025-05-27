@@ -5,6 +5,7 @@ defmodule BeamMePrompty.AgentManager do
   import BeamMePrompty.Agent.Dsl.Part
 
   alias BeamMePrompty.Agent.Executor
+  alias BeamMePrompty.Errors.InvalidMessageFormatError
 
   @doc false
   def child_spec(opts) do
@@ -13,7 +14,7 @@ defmodule BeamMePrompty.AgentManager do
       start: {__MODULE__, :start_link, [opts]},
       type: :worker,
       restart: :permanent,
-      shutdown: 500
+      shutdown: 5000
     }
   end
 
@@ -44,10 +45,23 @@ defmodule BeamMePrompty.AgentManager do
     )
   end
 
+  @doc """
+  Sends a message to a running agent instance.
+
+  The `pid_or_session_id` can be either the process ID (PID) of the agent
+  or a session ID. If a session ID is provided, it is resolved to a
+  registered agent process name via `BeamMePrompty.Agent.Executor`.
+
+  The message must be a valid `BeamMePrompty.Agent.Dsl.Part` struct.
+  If the message format is invalid, an `InvalidMessageFormatError` is returned.
+  """
+  @spec send_message(pid() | reference(), BeamMePrompty.Agent.Dsl.Part.parts()) ::
+          :ok | {:error, term()}
   def send_message(pid_or_session_id, message) when is_part(message),
     do: Executor.message_agent(pid_or_session_id, message)
 
   def send_message(_, message) do
-    {:error, "Invalid message format: #{inspect(message)}"}
+    {:error,
+     %InvalidMessageFormatError{reason: "Invalid message format", offending_value: message}}
   end
 end
