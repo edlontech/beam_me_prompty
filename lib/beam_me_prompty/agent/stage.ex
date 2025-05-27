@@ -144,7 +144,8 @@ defmodule BeamMePrompty.Agent.Stage do
            inputs_for_llm,
            stage_data.messages,
            stage_data.agent_module,
-           stage_data.current_agent_state
+           stage_data.current_agent_state,
+           stage_data.session_id
          ) do
       {:ok, llm_result, updated_messages_history, final_agent_state_after_llm} ->
         Logger.debug("""

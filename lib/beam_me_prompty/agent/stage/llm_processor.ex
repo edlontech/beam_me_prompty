@@ -26,6 +26,7 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
     making function signatures cleaner and easier to maintain.
     """
 
+    field :session_id, String.t() | nil, default: nil
     field :llm_client, any(), enforce: true
     field :model, String.t(), enforce: true
     field :available_tools, list(), default: []
@@ -44,7 +45,8 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
         input,
         initial_messages_history,
         agent_module,
-        current_agent_state
+        current_agent_state,
+        session_id
       )
       when is_map(config) do
     case validate_llm_config(config) do
@@ -60,6 +62,7 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
           )
 
         context = %Context{
+          session_id: session_id,
           llm_client: validated_config.llm_client,
           model: validated_config.model,
           available_tools: tools,
@@ -70,7 +73,7 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
           current_agent_state: current_agent_state
         }
 
-        log_llm_interaction("starting_llm_processing", %{
+        log_llm_interaction(context, "starting_llm_processing", %{
           model: context.model,
           tool_count: length(tools),
           message_count: length(messages)
@@ -79,13 +82,21 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
         process_llm_interactions(context, messages)
 
       {:error, reason} ->
-        log_llm_interaction("config_validation_failed", %{reason: reason})
+        log_llm_interaction(session_id, "config_validation_failed", %{reason: reason})
+
         {:ok, %{}, initial_messages_history, current_agent_state}
     end
   end
 
-  def maybe_call_llm([], _input, current_messages, _agent_module, current_agent_state) do
-    log_llm_interaction("no_llm_config", %{})
+  def maybe_call_llm(
+        [],
+        _input,
+        current_messages,
+        _agent_module,
+        current_agent_state,
+        session_id
+      ) do
+    log_llm_interaction(session_id, "no_llm_config", %{})
     {:ok, %{}, current_messages, current_agent_state}
   end
 
@@ -94,9 +105,10 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
         _input,
         current_messages,
         _agent_module,
-        current_agent_state
+        current_agent_state,
+        session_id
       ) do
-    log_llm_interaction("unhandled_config_format", %{})
+    log_llm_interaction(session_id, "unhandled_config_format", %{})
     {:ok, %{}, current_messages, current_agent_state}
   end
 
@@ -107,7 +119,7 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
         %Context{remaining_iterations: 0} = context,
         _current_request_messages
       ) do
-    log_llm_interaction("max_iterations_reached", %{iterations: 0})
+    log_llm_interaction(context, "max_iterations_reached", %{iterations: 0})
     {:error, :max_tool_iterations_reached, context.message_history, context.current_agent_state}
   end
 
@@ -115,7 +127,7 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
     messages_to_send_to_llm =
       MessageManager.combine_messages_for_llm(context.message_history, current_request_messages)
 
-    log_llm_interaction("sending_request", %{
+    log_llm_interaction(context, "sending_request", %{
       message_count: length(messages_to_send_to_llm),
       remaining_iterations: context.remaining_iterations
     })
@@ -138,7 +150,7 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
         )
 
       {:error, reason} ->
-        log_llm_interaction("completion_failed", %{reason: reason})
+        log_llm_interaction(context, "completion_failed", %{reason: reason})
         {:error, reason, context.message_history, context.current_agent_state}
     end
   end
@@ -149,11 +161,11 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
   def handle_llm_response(%Context{} = context, llm_response_content) do
     case function_call_response(llm_response_content) do
       {:ok, final_llm_content} ->
-        log_llm_interaction("final_response", %{content_type: typeof(final_llm_content)})
+        log_llm_interaction(context, "final_response", %{content_type: typeof(final_llm_content)})
         {:ok, final_llm_content, context.message_history, context.current_agent_state}
 
       {:tool, tool_function_call_part} ->
-        log_llm_interaction("tool_call_detected", %{
+        log_llm_interaction(context, "tool_call_detected", %{
           tool_name: get_in(tool_function_call_part, [:function_call, :name])
         })
 
@@ -244,7 +256,9 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
   defp handle_llm_completion_success(context, llm_response_content, messages_to_send_to_llm) do
     case validate_structured_response(llm_response_content, context.llm_params) do
       {:ok, validated_response} ->
-        log_llm_interaction("response_validated", %{response_type: typeof(validated_response)})
+        log_llm_interaction(context, "response_validated", %{
+          response_type: typeof(validated_response)
+        })
 
         assistant_response_message = MessageManager.format_response(validated_response)
 
@@ -258,7 +272,7 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
         handle_llm_response(updated_context, validated_response)
 
       {:error, validation_error} ->
-        log_llm_interaction("validation_failed", %{error: validation_error})
+        log_llm_interaction(context, "validation_failed", %{error: validation_error})
         {:error, validation_error, context.message_history, context.current_agent_state}
     end
   end
@@ -267,8 +281,11 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
     if is_tuple(llm_client), do: llm_client, else: {llm_client, []}
   end
 
-  defp log_llm_interaction(event, metadata) do
-    Logger.debug("[BeamMePrompty] LLMProcessor: #{event}")
+  defp log_llm_interaction(context, event, metadata) when is_struct(context),
+    do: log_llm_interaction(context.session_id, event, metadata)
+
+  defp log_llm_interaction(session_id, event, metadata) do
+    Logger.debug("[BeamMePrompty] (sid: #{session_id}) LLMProcessor: #{event}")
     Logger.debug("#{inspect(metadata)}")
   end
 

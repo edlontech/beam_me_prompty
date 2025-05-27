@@ -1,7 +1,6 @@
 defmodule BeamMePrompty.Agent.Stage.Config do
   @moduledoc """
   Configuration management for Stage execution.
-
   Handles default values, validation, and configuration merging for stage execution parameters.
   """
 

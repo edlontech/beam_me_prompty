@@ -14,14 +14,12 @@ defmodule BeamMePrompty.Agent.Stage.AgentCallbacks do
   def call_stage_start(nil, _node_def, agent_state), do: {:ok, agent_state}
 
   def call_stage_start(agent_module, node_def, agent_state) do
-    try do
-      result = agent_module.handle_stage_start(node_def, agent_state)
-      {:ok, result}
-    rescue
-      e ->
-        Logger.warning("[BeamMePrompty] Agent callback handle_stage_start failed: #{inspect(e)}")
-        {:ok, agent_state}
-    end
+    result = agent_module.handle_stage_start(node_def, agent_state)
+    {:ok, result}
+  rescue
+    e ->
+      Logger.warning("[BeamMePrompty] Agent callback handle_stage_start failed: #{inspect(e)}")
+      {:ok, agent_state}
   end
 
   @doc """
