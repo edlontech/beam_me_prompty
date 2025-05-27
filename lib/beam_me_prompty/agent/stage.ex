@@ -29,8 +29,8 @@ defmodule BeamMePrompty.Agent.Stage do
   alias BeamMePrompty.Agent.Dsl.FunctionResultPart
   alias BeamMePrompty.Agent.Dsl.TextPart
   alias BeamMePrompty.Errors
-  alias BeamMePrompty.LLM.MessageParser
   alias BeamMePrompty.LLM.Errors.ToolError
+  alias BeamMePrompty.LLM.MessageParser
 
   defstruct [
     :stage_name,

@@ -3,9 +3,9 @@ defmodule BeamMePrompty.LLM.GoogleGeminiTest do
 
   import BeamMePrompty.Agent.Dsl.Part, only: [text_part: 1]
 
+  alias BeamMePrompty.Agent.Dsl.LLMParams
   alias BeamMePrompty.Fixtures.GoogleGemini, as: GeminiFixtures
   alias BeamMePrompty.LLM.GoogleGemini
-  alias BeamMePrompty.Agent.Dsl.LLMParams
 
   describe "completion/4" do
     test "should return a valid completion response" do

@@ -5,8 +5,8 @@ defmodule BeamMePrompty.AgentTest do
   import ExUnit.CaptureLog
   import Hammox
 
-  alias BeamMePrompty.TestAgent
   alias BeamMePrompty.LLM.Errors.ToolError
+  alias BeamMePrompty.TestAgent
 
   setup :set_mox_from_context
   setup :verify_on_exit!
