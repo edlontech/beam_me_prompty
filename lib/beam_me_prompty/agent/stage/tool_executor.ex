@@ -166,7 +166,6 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutor do
         agent_module,
         current_agent_state
       ) do
-    # Call agent's handle_tool_call callback
     {tool_call_status, agent_state_after_tool_call_cb} =
       AgentCallbacks.call_tool_call(
         agent_module,
@@ -182,7 +181,6 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutor do
         current_agent_state
       )
 
-    # Find and execute the tool
     tool_definition = find_tool_definition(available_tools, tool_info.tool_name)
 
     if tool_definition do

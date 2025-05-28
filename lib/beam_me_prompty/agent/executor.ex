@@ -50,7 +50,8 @@ defmodule BeamMePrompty.Agent.Executor do
 
   @callback handle_stage_start(stage :: map(), inner_state :: map()) :: :ok
 
-  @callback handle_stage_finish(stage :: map(), result :: map(), inner_state :: map()) :: :ok
+  @callback handle_stage_finish(stage :: map(), result :: map(), inner_state :: map()) ::
+              {:ok, map()} | {:error, term()}
 
   @callback handle_batch_complete(
               batch_results :: map(),
@@ -71,7 +72,8 @@ defmodule BeamMePrompty.Agent.Executor do
             ) ::
               {:ok, map()}
 
-  @callback handle_complete(results :: map(), inner_state :: map()) :: :ok
+  @callback handle_complete(results :: map(), inner_state :: map()) ::
+              {:ok, map()} | {:error, term()}
 
   @callback handle_cleanup(execution_status :: :completed | :error, inner_state :: map()) :: :ok
 
@@ -110,7 +112,7 @@ defmodule BeamMePrompty.Agent.Executor do
       def handle_stage_start(_stage, _state), do: :ok
 
       @doc false
-      def handle_stage_finish(_stage, _result, _state), do: :ok
+      def handle_stage_finish(_stage, _result, state), do: {:ok, state}
 
       @doc false
       def handle_batch_complete(_batch_results, _pending_nodes, state), do: {:ok, state}
@@ -125,7 +127,7 @@ defmodule BeamMePrompty.Agent.Executor do
       def handle_progress(_progress, state), do: {:ok, state}
 
       @doc false
-      def handle_complete(_results, _state), do: :ok
+      def handle_complete(_results, state), do: {:ok, state}
 
       @doc false
       def handle_cleanup(_execution_status, _state), do: :ok
