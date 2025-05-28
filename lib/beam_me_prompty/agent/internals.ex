@@ -50,6 +50,7 @@ defmodule BeamMePrompty.Agent.Internals do
   ]
 
   alias BeamMePrompty.Agent.StagesSupervisor
+  alias BeamMePrompty.Telemetry
 
   alias BeamMePrompty.Agent.Internals.BatchManager
   alias BeamMePrompty.Agent.Internals.ErrorHandler
@@ -61,6 +62,18 @@ defmodule BeamMePrompty.Agent.Internals do
 
   @impl true
   def init({session_id, dag, input, initial_agent_state, opts, agent_module}) do
+    :telemetry.execute(
+      [:beam_me_prompty, :agent_execution, :start],
+      %{system_time: System.system_time(:nanosecond)},
+      %{
+        agent_module: agent_module,
+        session_id: session_id,
+        input_keys: Map.keys(input),
+        initial_state_keys: Map.keys(initial_agent_state),
+        opts_keys: Keyword.keys(opts)
+      }
+    )
+
     Logger.debug(
       "[BeamMePrompty] Agent [#{inspect(agent_module)}](sid: #{inspect(session_id)}) initializing..."
     )
@@ -99,10 +112,12 @@ defmodule BeamMePrompty.Agent.Internals do
   end
 
   def waiting_for_plan(:internal, :plan, data) do
-    current_results = ResultManager.get_all_results(data.result_manager)
-    ready_nodes_from_dag = DAG.find_ready_nodes(data.dag, current_results)
     completed_count = ResultManager.completed_count(data.result_manager)
     total_count = map_size(data.dag.nodes)
+    Telemetry.dag_planning_start(data.agent_module, data.session_id, completed_count, total_count)
+
+    current_results = ResultManager.get_all_results(data.result_manager)
+    ready_nodes_from_dag = DAG.find_ready_nodes(data.dag, current_results)
 
     Logger.debug(
       "[BeamMePrompty] Agent [#{inspect(data.agent_module)}](sid: #{inspect(data.session_id)}) #{inspect(ready_nodes_from_dag)}, Completed: #{completed_count}/#{total_count}"
@@ -124,6 +139,15 @@ defmodule BeamMePrompty.Agent.Internals do
         :ok -> planned_nodes
         _ -> ready_nodes_from_dag
       end
+
+    Telemetry.dag_planning_stop(
+      data.agent_module,
+      data.session_id,
+      Enum.count(ready_nodes_from_dag),
+      Enum.count(planned_nodes),
+      Enum.count(effective_ready_nodes),
+      plan_status
+    )
 
     updated_data = %{data | current_state: updated_agent_state}
 
@@ -445,6 +469,13 @@ defmodule BeamMePrompty.Agent.Internals do
 
   @impl true
   def terminate(reason, _state_name, data) do
+    Telemetry.agent_execution_stop(
+      data.agent_module,
+      data.session_id,
+      reason,
+      data.result_manager
+    )
+
     execution_status =
       case reason do
         :normal -> :completed

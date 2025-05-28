@@ -28,6 +28,7 @@ defmodule BeamMePrompty.Agent.Stage do
   alias BeamMePrompty.Agent.Stage.LLMProcessor
   alias BeamMePrompty.Agent.Stage.MessageManager
   alias BeamMePrompty.Errors
+  alias BeamMePrompty.Telemetry
 
   defstruct [
     :stage_name,
@@ -64,6 +65,13 @@ defmodule BeamMePrompty.Agent.Stage do
   end
 
   def idle(:cast, {:execute, node_name, node_def, node_ctx, caller_pid}, data) do
+    Telemetry.stage_execution_start(
+      data.agent_module,
+      data.session_id,
+      data.stage_name,
+      node_name
+    )
+
     agent_module_from_ctx = node_ctx[:agent_module]
     agent_state_from_ctx = node_ctx[:current_agent_state]
 
@@ -113,6 +121,15 @@ defmodule BeamMePrompty.Agent.Stage do
         :error -> {:error, result_payload}
       end
 
+    Telemetry.stage_execution_stop(
+      final_stage_data.agent_module,
+      final_stage_data.session_id,
+      final_stage_data.stage_name,
+      node_name,
+      stage_execution_result,
+      result_payload
+    )
+
     send(
       caller_pid,
       {:stage_response, node_name, response_payload, final_stage_data.current_agent_state}
@@ -145,7 +162,8 @@ defmodule BeamMePrompty.Agent.Stage do
            stage_data.messages,
            stage_data.agent_module,
            stage_data.current_agent_state,
-           stage_data.session_id
+           stage_data.session_id,
+           stage_data.stage_name
          ) do
       {:ok, llm_result, updated_messages_history, final_agent_state_after_llm} ->
         Logger.debug("""

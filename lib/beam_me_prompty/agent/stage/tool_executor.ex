@@ -13,6 +13,7 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutor do
 
   alias BeamMePrompty.Agent.Stage.AgentCallbacks
   alias BeamMePrompty.Agent.Stage.MessageManager
+  alias BeamMePrompty.Telemetry
 
   @doc """
   Handles tool execution when the tool is not found in available tools.
@@ -26,8 +27,18 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutor do
         message_history,
         remaining_iterations,
         agent_module,
-        current_agent_state
+        current_agent_state,
+        stage_name,
+        session_id
       ) do
+    Telemetry.tool_execution_start(
+      agent_module,
+      session_id,
+      stage_name,
+      tool_info.tool_name,
+      tool_info.tool_args
+    )
+
     error_content_for_llm = "Tool not defined: #{tool_info.tool_name}"
 
     tool_not_found_msg_to_llm = [
@@ -54,6 +65,15 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutor do
         agent_state_after_tool_result_cb,
         current_agent_state
       )
+
+    Telemetry.tool_execution_stop(
+      agent_module,
+      session_id,
+      stage_name,
+      tool_info.tool_name,
+      :error,
+      error_content_for_llm
+    )
 
     {
       :continue_llm_interactions,
@@ -82,8 +102,18 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutor do
         message_history,
         remaining_iterations,
         agent_module,
-        current_agent_state
+        current_agent_state,
+        stage_name,
+        session_id
       ) do
+    Telemetry.tool_execution_start(
+      agent_module,
+      session_id,
+      stage_name,
+      tool_info.tool_name,
+      tool_info.tool_args
+    )
+
     actual_tool_run_result = execute_tool(tool_def, tool_info.tool_args)
 
     {tool_result_status, agent_state_after_tool_result_cb} =
@@ -107,6 +137,17 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutor do
         tool_info.tool_call_id,
         tool_info.tool_name
       )
+
+    tool_status = if elem(actual_tool_run_result, 0) == :ok, do: :ok, else: :error
+
+    Telemetry.tool_execution_stop(
+      agent_module,
+      session_id,
+      stage_name,
+      tool_info.tool_name,
+      tool_status,
+      actual_tool_run_result
+    )
 
     {
       :continue_llm_interactions,
@@ -164,7 +205,9 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutor do
         message_history,
         remaining_iterations,
         agent_module,
-        current_agent_state
+        current_agent_state,
+        stage_name,
+        session_id
       ) do
     {tool_call_status, agent_state_after_tool_call_cb} =
       AgentCallbacks.call_tool_call(
@@ -194,7 +237,9 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutor do
         message_history,
         remaining_iterations - 1,
         agent_module,
-        updated_agent_state_post_handle_tool_call
+        updated_agent_state_post_handle_tool_call,
+        stage_name,
+        session_id
       )
     else
       handle_tool_not_found(
@@ -206,12 +251,13 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutor do
         message_history,
         remaining_iterations - 1,
         agent_module,
-        updated_agent_state_post_handle_tool_call
+        updated_agent_state_post_handle_tool_call,
+        stage_name,
+        session_id
       )
     end
   end
 
-  # Private helper to normalize tool names
   defp normalize_tool_name(tool) do
     String.to_existing_atom(tool.name)
   rescue

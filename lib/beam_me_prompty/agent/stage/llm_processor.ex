@@ -16,6 +16,7 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
   alias BeamMePrompty.Agent.Stage.Config
   alias BeamMePrompty.Agent.Stage.MessageManager
   alias BeamMePrompty.Agent.Stage.ToolExecutor
+  alias BeamMePrompty.Telemetry
   alias BeamMePrompty.Validator
 
   typedstruct module: Context do
@@ -35,6 +36,7 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
     field :remaining_iterations, non_neg_integer(), default: 5
     field :agent_module, module() | nil, default: nil
     field :current_agent_state, map(), default: %{}
+    field :stage_name, atom() | nil, default: nil
   end
 
   @doc """
@@ -46,7 +48,8 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
         initial_messages_history,
         agent_module,
         current_agent_state,
-        session_id
+        session_id,
+        stage_name
       )
       when is_map(config) do
     case validate_llm_config(config) do
@@ -70,7 +73,8 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
           message_history: initial_messages_history,
           remaining_iterations: Config.default_max_tool_iterations(),
           agent_module: agent_module,
-          current_agent_state: current_agent_state
+          current_agent_state: current_agent_state,
+          stage_name: stage_name
         }
 
         log_llm_interaction(context, "starting_llm_processing", %{
@@ -94,7 +98,8 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
         current_messages,
         _agent_module,
         current_agent_state,
-        session_id
+        session_id,
+        _stage_name
       ) do
     log_llm_interaction(session_id, "no_llm_config", %{})
     {:ok, %{}, current_messages, current_agent_state}
@@ -106,7 +111,8 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
         current_messages,
         _agent_module,
         current_agent_state,
-        session_id
+        session_id,
+        _stage_name
       ) do
     log_llm_interaction(session_id, "unhandled_config_format", %{})
     {:ok, %{}, current_messages, current_agent_state}
@@ -124,8 +130,21 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
   end
 
   def process_llm_interactions(%Context{} = context, current_request_messages) do
+    llm_client_module_for_telemetry =
+      if is_tuple(context.llm_client), do: elem(context.llm_client, 0), else: context.llm_client
+
     messages_to_send_to_llm =
       MessageManager.combine_messages_for_llm(context.message_history, current_request_messages)
+
+    Telemetry.llm_call_start(
+      context.agent_module,
+      context.session_id,
+      context.stage_name,
+      llm_client_module_for_telemetry,
+      context.model,
+      Enum.count(messages_to_send_to_llm),
+      Enum.count(context.available_tools)
+    )
 
     log_llm_interaction(context, "sending_request", %{
       message_count: length(messages_to_send_to_llm),
@@ -149,7 +168,19 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
           messages_to_send_to_llm
         )
 
+      # The llm_call_stop for successful case is handled in handle_llm_completion_success
+
       {:error, reason} ->
+        Telemetry.llm_call_stop(
+          context.agent_module,
+          context.session_id,
+          context.stage_name,
+          llm_client_module_for_telemetry,
+          context.model,
+          :error,
+          reason
+        )
+
         log_llm_interaction(context, "completion_failed", %{reason: reason})
         {:error, reason, context.message_history, context.current_agent_state}
     end
@@ -180,7 +211,9 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
                context.message_history,
                context.remaining_iterations,
                context.agent_module,
-               context.current_agent_state
+               context.current_agent_state,
+               context.stage_name,
+               context.session_id
              ) do
           {
             :continue_llm_interactions,
@@ -269,9 +302,41 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
           )
 
         updated_context = %Context{context | message_history: history_after_llm_response}
+
+        # Telemetry stop for OK is called here because this is the point of successful receipt and validation before further processing (like tool calls).
+        llm_client_module_for_telemetry =
+          if is_tuple(context.llm_client),
+            do: elem(context.llm_client, 0),
+            else: context.llm_client
+
+        Telemetry.llm_call_stop(
+          context.agent_module,
+          context.session_id,
+          context.stage_name,
+          llm_client_module_for_telemetry,
+          context.model,
+          :ok,
+          validated_response
+        )
+
         handle_llm_response(updated_context, validated_response)
 
       {:error, validation_error} ->
+        llm_client_module_for_telemetry =
+          if is_tuple(context.llm_client),
+            do: elem(context.llm_client, 0),
+            else: context.llm_client
+
+        Telemetry.llm_call_stop(
+          context.agent_module,
+          context.session_id,
+          context.stage_name,
+          llm_client_module_for_telemetry,
+          context.model,
+          :error,
+          validation_error
+        )
+
         log_llm_interaction(context, "validation_failed", %{error: validation_error})
         {:error, validation_error, context.message_history, context.current_agent_state}
     end
