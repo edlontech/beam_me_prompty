@@ -38,7 +38,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandler do
           {:next_state, atom(), data_struct(), list()}
           | {:stop, any(), data_struct()}
   def handle_execution_error(error_detail, data) do
-    Logger.warning(
+    Logger.debug(
       "[ErrorHandler] Agent [#{inspect(data.agent_module)}] (sid: #{inspect(data.session_id)}) handling error: #{inspect(error_detail)}"
     )
 
@@ -153,7 +153,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandler do
   def handle_stage_worker_error(node_name, reason) do
     error_msg = "Failed to start stage worker for #{node_name}: #{inspect(reason)}"
     Logger.error("[ErrorHandler] #{error_msg}")
-    raise BeamMePrompty.Errors.Framework.exception(cause: error_msg)
+    raise BeamMePrompty.Errors.ExecutionError.exception(cause: error_msg)
   end
 
   @doc """
@@ -182,7 +182,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandler do
   defp process_agent_error_response(agent_response, data) do
     case agent_response do
       {:retry, new_agent_state_for_retry} ->
-        Logger.info(
+        Logger.debug(
           "[ErrorHandler] Agent [#{inspect(data.agent_module)}] (sid: #{inspect(data.session_id)}) Agent requested retry with new state"
         )
 
@@ -190,14 +190,14 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandler do
         {:next_state, :waiting_for_plan, reset_data, [{:next_event, :internal, :plan}]}
 
       {:stop, stop_reason} ->
-        Logger.info(
+        Logger.debug(
           "[ErrorHandler] Agent [#{inspect(data.agent_module)}] (sid: #{inspect(data.session_id)}) Agent requested stop: #{inspect(stop_reason)}"
         )
 
         {:stop, {:agent_stopped_execution, stop_reason}, data}
 
       {:restart, restart_reason} ->
-        Logger.info(
+        Logger.debug(
           "[ErrorHandler] Agent [#{inspect(data.agent_module)}] (sid: #{inspect(data.session_id)}) Agent requested restart: #{inspect(restart_reason)}"
         )
 

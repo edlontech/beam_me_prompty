@@ -52,6 +52,7 @@ defmodule BeamMePrompty.MixProject do
       {:ex_doc, "~> 0.38", only: :dev, runtime: false},
       {:gen_state_machine, "~> 3.0"},
       {:hammox, "~> 0.7", only: :test},
+      {:mimic, "~> 1.12", only: :test},
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
       {:mustache, "~> 0.5"},
       {:nimble_options, "~> 1.1"},
