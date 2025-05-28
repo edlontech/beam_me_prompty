@@ -73,22 +73,17 @@ defmodule BeamMePrompty.Agent.Internals.BatchManager do
   """
   @spec prepare_batch([node_tuple()], any()) :: t()
   def prepare_batch(nodes_to_execute, agent_state) when is_list(nodes_to_execute) do
-    Logger.debug("[BatchManager] Preparing batch with #{length(nodes_to_execute)} nodes")
-
-    # Update all node contexts with current agent state
     nodes_with_updated_context =
       Enum.map(nodes_to_execute, fn {name, node_def, node_ctx} ->
         updated_ctx = Map.put(node_ctx, :current_agent_state, agent_state)
         {name, node_def, updated_ctx}
       end)
 
-    # Create batch details map
     batch_details_map =
       Enum.into(nodes_with_updated_context, %{}, fn {name, node_def, updated_ctx} ->
         {name, {node_def, updated_ctx}}
       end)
 
-    # Extract pending node names
     pending_node_names =
       Enum.map(nodes_with_updated_context, fn {name, _, _} -> name end)
 
@@ -113,10 +108,6 @@ defmodule BeamMePrompty.Agent.Internals.BatchManager do
   @spec dispatch_nodes(t(), stage_workers(), caller_pid()) :: :ok
   def dispatch_nodes(%__MODULE__{} = batch, stage_workers, caller_pid)
       when is_map(stage_workers) and is_pid(caller_pid) do
-    Logger.debug(
-      "[BatchManager] Dispatching #{length(batch.pending_nodes)} nodes to stage workers"
-    )
-
     Enum.each(batch.batch_details, fn {node_name, {node_def, node_ctx}} ->
       case Map.get(stage_workers, node_name) do
         nil ->
@@ -160,14 +151,8 @@ defmodule BeamMePrompty.Agent.Internals.BatchManager do
   @spec handle_stage_completion(t(), node_name(), stage_result()) ::
           {:batch_complete, t()} | {:batch_pending, t()}
   def handle_stage_completion(%__MODULE__{} = batch, node_name, result) do
-    Logger.debug(
-      "[BatchManager] Node #{node_name} completed with result type: #{inspect(result.__struct__ || :primitive)}"
-    )
-
-    # Add result to temp results
     updated_temp_results = Map.put(batch.temp_results, node_name, result)
 
-    # Remove from pending nodes
     updated_pending_nodes = List.delete(batch.pending_nodes, node_name)
 
     updated_batch = %{
@@ -177,13 +162,8 @@ defmodule BeamMePrompty.Agent.Internals.BatchManager do
     }
 
     if Enum.empty?(updated_pending_nodes) do
-      Logger.debug("[BatchManager] Batch execution complete")
       {:batch_complete, updated_batch}
     else
-      Logger.debug(
-        "[BatchManager] Batch still pending: #{length(updated_pending_nodes)} nodes remaining"
-      )
-
       {:batch_pending, updated_batch}
     end
   end

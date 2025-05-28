@@ -9,10 +9,11 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
 
   require Logger
 
+  alias BeamMePrompty.DAG
+
   @type agent_module :: module()
   @type agent_state :: any()
   @type callback_status :: :ok | {:ok, any()} | any()
-  @type dag :: any()
   @type ready_nodes :: [atom()]
   @type planned_nodes :: [atom()]
   @type node_definitions :: [tuple()]
@@ -68,11 +69,9 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   `{status, final_state}` tuple where status indicates success/failure
   and final_state is the resolved agent state.
   """
-  @spec execute_init_callback(agent_module(), dag(), agent_state()) ::
+  @spec execute_init_callback(agent_module(), DAG.dag(), agent_state()) ::
           {callback_status(), agent_state()}
   def execute_init_callback(agent_module, dag, initial_state) do
-    Logger.debug("[StateManager] Executing init callback for #{inspect(agent_module)}")
-
     {status, new_state} = agent_module.handle_init(dag, initial_state)
     final_state = handle_callback_response({status, new_state}, initial_state)
 
@@ -93,10 +92,6 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   @spec execute_plan_callback(agent_module(), ready_nodes(), agent_state()) ::
           {callback_status(), planned_nodes(), agent_state()}
   def execute_plan_callback(agent_module, ready_nodes, current_state) do
-    Logger.debug(
-      "[StateManager] Executing plan callback for #{inspect(agent_module)} with ready nodes: #{inspect(ready_nodes)}"
-    )
-
     {status, planned_nodes, new_state} = agent_module.handle_plan(ready_nodes, current_state)
     final_state = handle_callback_response({status, new_state}, current_state)
 
@@ -117,10 +112,6 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   @spec execute_batch_start_callback(agent_module(), node_definitions(), agent_state()) ::
           {callback_status(), agent_state()}
   def execute_batch_start_callback(agent_module, nodes_to_execute, current_state) do
-    Logger.debug(
-      "[StateManager] Executing batch_start callback for #{inspect(agent_module)} with #{length(nodes_to_execute)} nodes"
-    )
-
     {status, new_state} = agent_module.handle_batch_start(nodes_to_execute, current_state)
     final_state = handle_callback_response({status, new_state}, current_state)
 
@@ -147,8 +138,6 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
         ) ::
           {callback_status(), agent_state()}
   def execute_stage_finish_callback(agent_module, stage_definition, stage_result, current_state) do
-    Logger.debug("[StateManager] Executing stage_finish callback for #{inspect(agent_module)}")
-
     {status, new_state} =
       agent_module.handle_stage_finish(stage_definition, stage_result, current_state)
 
@@ -171,10 +160,6 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   @spec execute_progress_callback(agent_module(), progress_info(), agent_state()) ::
           {callback_status(), agent_state()}
   def execute_progress_callback(agent_module, progress_info, current_state) do
-    Logger.debug(
-      "[StateManager] Executing progress callback for #{inspect(agent_module)} - #{progress_info.completed}/#{progress_info.total} completed"
-    )
-
     {status, new_state} = agent_module.handle_progress(progress_info, current_state)
     final_state = handle_callback_response({status, new_state}, current_state)
 
@@ -201,10 +186,6 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
         ) ::
           {callback_status(), agent_state()}
   def execute_batch_complete_callback(agent_module, batch_results, pending_nodes, current_state) do
-    Logger.debug(
-      "[StateManager] Executing batch_complete callback for #{inspect(agent_module)} with #{map_size(batch_results)} results"
-    )
-
     {status, new_state} =
       agent_module.handle_batch_complete(batch_results, pending_nodes, current_state)
 
@@ -227,8 +208,6 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   @spec execute_complete_callback(agent_module(), map(), agent_state()) ::
           {callback_status(), agent_state()}
   def execute_complete_callback(agent_module, final_results, current_state) do
-    Logger.debug("[StateManager] Executing complete callback for #{inspect(agent_module)}")
-
     {status, new_state} = agent_module.handle_complete(final_results, current_state)
     final_state = handle_callback_response({status, new_state}, current_state)
 
@@ -248,10 +227,6 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   """
   @spec execute_error_callback(agent_module(), error_class(), agent_state()) :: any()
   def execute_error_callback(agent_module, error_class, current_state) do
-    Logger.debug(
-      "[StateManager] Executing error callback for #{inspect(agent_module)} with error: #{inspect(error_class)}"
-    )
-
     agent_module.handle_error(error_class, current_state)
   end
 
@@ -268,10 +243,6 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   """
   @spec execute_cleanup_callback(agent_module(), atom(), agent_state()) :: any()
   def execute_cleanup_callback(agent_module, execution_status, current_state) do
-    Logger.debug(
-      "[StateManager] Executing cleanup callback for #{inspect(agent_module)} with status: #{inspect(execution_status)}"
-    )
-
     agent_module.handle_cleanup(execution_status, current_state)
   end
 
@@ -287,17 +258,15 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   """
   @spec safe_execute(function(), String.t()) :: {:ok, any()} | {:error, any()}
   def safe_execute(callback_fn, error_context) do
-    try do
-      result = callback_fn.()
-      {:ok, result}
-    rescue
-      error ->
-        Logger.error("[StateManager] Error in #{error_context}: #{inspect(error)}")
-        {:error, {:callback_error, error}}
-    catch
-      thrown_value ->
-        Logger.error("[StateManager] Thrown value in #{error_context}: #{inspect(thrown_value)}")
-        {:error, {:callback_thrown, thrown_value}}
-    end
+    result = callback_fn.()
+    {:ok, result}
+  rescue
+    error ->
+      Logger.error("[StateManager] Error in #{error_context}: #{inspect(error)}")
+      {:error, {:callback_error, error}}
+  catch
+    thrown_value ->
+      Logger.error("[StateManager] Thrown value in #{error_context}: #{inspect(thrown_value)}")
+      {:error, {:callback_thrown, thrown_value}}
   end
 end

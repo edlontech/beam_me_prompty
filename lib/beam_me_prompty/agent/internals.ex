@@ -36,6 +36,7 @@ defmodule BeamMePrompty.Agent.Internals do
     :global_input,
     :initial_state,
     :current_state,
+    :nodes_to_execute,
     :opts,
 
     # Infrastructure
@@ -45,10 +46,7 @@ defmodule BeamMePrompty.Agent.Internals do
     # Management components
     :result_manager,
     :batch_manager,
-    :progress_tracker,
-
-    # Legacy fields for compatibility (will be removed gradually)
-    :nodes_to_execute
+    :progress_tracker
   ]
 
   alias BeamMePrompty.Agent.StagesSupervisor
@@ -75,7 +73,6 @@ defmodule BeamMePrompty.Agent.Internals do
         stage_workers = start_stage_workers(sup_pid, session_id, agent_module, dag.nodes)
         agent_config = agent_module.agent_config()
 
-        # Initialize with new component managers
         data = %__MODULE__{
           agent_type: agent_config.agent_state,
           session_id: session_id,
@@ -90,7 +87,6 @@ defmodule BeamMePrompty.Agent.Internals do
           result_manager: ResultManager.new(),
           batch_manager: BatchManager.new(),
           progress_tracker: ProgressTracker.new(map_size(dag.nodes)),
-          # Legacy field for compatibility
           nodes_to_execute: []
         }
 
@@ -112,7 +108,6 @@ defmodule BeamMePrompty.Agent.Internals do
       "[BeamMePrompty] Agent [#{inspect(data.agent_module)}](sid: #{inspect(data.session_id)}) #{inspect(ready_nodes_from_dag)}, Completed: #{completed_count}/#{total_count}"
     )
 
-    # Use StateManager for plan callback
     {plan_status, planned_nodes, updated_agent_state} =
       StateManager.execute_plan_callback(
         data.agent_module,
@@ -180,7 +175,6 @@ defmodule BeamMePrompty.Agent.Internals do
   defp handle_execution_completion(data) do
     current_results = ResultManager.get_all_results(data.result_manager)
 
-    # Use StateManager for complete callback
     {_status, final_agent_state} =
       StateManager.execute_complete_callback(
         data.agent_module,
@@ -229,7 +223,6 @@ defmodule BeamMePrompty.Agent.Internals do
        ) do
     updated_data = %{data | current_state: agent_state_from_stage}
 
-    # Handle stage completion using BatchManager
     {batch_status, updated_batch} =
       BatchManager.handle_stage_completion(
         updated_data.batch_manager,
@@ -240,7 +233,6 @@ defmodule BeamMePrompty.Agent.Internals do
     # Get node details for stage finish callback
     case BatchManager.get_node_details(updated_data.batch_manager, node_name) do
       {:ok, {stage_node_definition, _node_ctx}} ->
-        # Use StateManager for stage finish callback
         {_status, agent_state_after_stage_finish} =
           StateManager.execute_stage_finish_callback(
             updated_data.agent_module,
@@ -255,7 +247,6 @@ defmodule BeamMePrompty.Agent.Internals do
             batch_manager: updated_batch
         }
 
-        # Update progress and handle completion
         handle_progress_and_completion(data_after_stage_finish, batch_status)
 
       :error ->
@@ -265,7 +256,6 @@ defmodule BeamMePrompty.Agent.Internals do
   end
 
   defp handle_stage_success_without_agent_state(data, node_name, stage_result) do
-    # Handle stage completion using BatchManager  
     {batch_status, updated_batch} =
       BatchManager.handle_stage_completion(
         data.batch_manager,
@@ -278,7 +268,6 @@ defmodule BeamMePrompty.Agent.Internals do
   end
 
   defp handle_progress_and_completion(data, batch_status) do
-    # Update progress tracker
     current_results = ResultManager.get_all_results(data.result_manager)
     batch_results = BatchManager.get_batch_results(data.batch_manager)
     total_completed = map_size(current_results) + map_size(batch_results)
@@ -288,7 +277,6 @@ defmodule BeamMePrompty.Agent.Internals do
 
     progress_info = ProgressTracker.get_progress_info(updated_progress_tracker)
 
-    # Use StateManager for progress callback
     {_status, agent_state_after_progress} =
       StateManager.execute_progress_callback(data.agent_module, progress_info, data.current_state)
 
@@ -302,19 +290,16 @@ defmodule BeamMePrompty.Agent.Internals do
   end
 
   defp handle_completion_status(data, :batch_complete) do
-    # Batch is complete, commit results and prepare for next planning
     batch_results = BatchManager.get_batch_results(data.batch_manager)
 
     updated_result_manager =
       ResultManager.commit_batch_results(data.result_manager, batch_results)
 
-    # Calculate pending nodes for batch complete callback
     all_dag_node_names = Map.keys(data.dag.nodes)
     current_results = ResultManager.get_all_results(updated_result_manager)
     completed_dag_node_names = Map.keys(current_results)
     pending_dag_nodes_list = all_dag_node_names -- completed_dag_node_names
 
-    # Use StateManager for batch complete callback
     {_status, agent_state_after_batch_complete} =
       StateManager.execute_batch_complete_callback(
         data.agent_module,
@@ -323,7 +308,6 @@ defmodule BeamMePrompty.Agent.Internals do
         data.current_state
       )
 
-    # Clear batch manager and transition to planning
     final_data = %{
       data
       | result_manager: updated_result_manager,
@@ -335,7 +319,6 @@ defmodule BeamMePrompty.Agent.Internals do
   end
 
   defp handle_completion_status(data, :batch_pending) do
-    # More nodes pending in current batch
     {:keep_state, data}
   end
 
@@ -343,7 +326,6 @@ defmodule BeamMePrompty.Agent.Internals do
     if Enum.empty?(data.nodes_to_execute) do
       {:next_state, :waiting_for_plan, data, [{:next_event, :internal, :plan}]}
     else
-      # Use StateManager for batch start callback
       {_batch_start_status, updated_agent_state} =
         StateManager.execute_batch_start_callback(
           data.agent_module,
@@ -353,18 +335,13 @@ defmodule BeamMePrompty.Agent.Internals do
 
       data_with_updated_state = %{data | current_state: updated_agent_state}
 
-      # Use BatchManager to prepare and dispatch the batch
       prepared_batch = BatchManager.prepare_batch(data.nodes_to_execute, updated_agent_state)
 
-      # Dispatch nodes to stage workers
       BatchManager.dispatch_nodes(prepared_batch, data_with_updated_state.stage_workers, self())
 
-      # Update data with new batch manager and clear legacy fields
       final_data = %{
         data_with_updated_state
         | batch_manager: prepared_batch,
-
-          # Clear legacy field
           nodes_to_execute: []
       }
 
@@ -422,7 +399,6 @@ defmodule BeamMePrompty.Agent.Internals do
       GenStateMachine.cast(stage_pid, {:update_messages, message, false})
     end
 
-    # Use ResultManager to archive current results and reset for new execution
     archived_result_manager = ResultManager.archive_current_results(data.result_manager)
     reset_progress_tracker = ProgressTracker.reset(data.progress_tracker)
     reset_batch_manager = BatchManager.new()
@@ -432,8 +408,6 @@ defmodule BeamMePrompty.Agent.Internals do
       | result_manager: archived_result_manager,
         progress_tracker: reset_progress_tracker,
         batch_manager: reset_batch_manager,
-
-        # Clear legacy field
         nodes_to_execute: []
     }
 
@@ -479,7 +453,6 @@ defmodule BeamMePrompty.Agent.Internals do
         _ -> :error
       end
 
-    # Use StateManager for cleanup callback
     if data.agent_module do
       StateManager.execute_cleanup_callback(
         data.agent_module,

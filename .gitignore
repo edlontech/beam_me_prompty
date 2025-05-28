@@ -1,6 +1,9 @@
 # Created by https://www.toptal.com/developers/gitignore/api/elixir,erlang,vim,visualstudiocode,macos
 # Edit at https://www.toptal.com/developers/gitignore?templates=elixir,erlang,vim,visualstudiocode,macos
 #
+
+repomix-output.xml
+
 # direnv
 .envrc
 priv/plts/dialyzer.plt
