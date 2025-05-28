@@ -134,7 +134,8 @@ defmodule BeamMePrompty.DAG do
 
   defp has_cycle?(dag, node, visited, temp_visited) do
     if MapSet.member?(temp_visited, node) do
-      {:error, "Cycle detected involving node #{node}"}
+      {:error,
+       BeamMePrompty.Errors.Framework.exception(cause: "Cycle detected involving node #{node}")}
     else
       if MapSet.member?(visited, node) do
         {:ok, visited}

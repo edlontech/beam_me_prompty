@@ -153,7 +153,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandler do
   def handle_stage_worker_error(node_name, reason) do
     error_msg = "Failed to start stage worker for #{node_name}: #{inspect(reason)}"
     Logger.error("[ErrorHandler] #{error_msg}")
-    raise error_msg
+    raise BeamMePrompty.Errors.Framework.exception(cause: error_msg)
   end
 
   @doc """

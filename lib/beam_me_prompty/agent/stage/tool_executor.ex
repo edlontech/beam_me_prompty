@@ -49,7 +49,12 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutor do
       )
     ]
 
-    tool_execution_outcome_for_agent = {:error, error_content_for_llm}
+    tool_execution_outcome_for_agent =
+      {:error,
+       BeamMePrompty.LLM.Errors.ToolError.exception(
+         module: __MODULE__,
+         cause: error_content_for_llm
+       )}
 
     {tool_result_status, agent_state_after_tool_result_cb} =
       AgentCallbacks.call_tool_result(
@@ -169,7 +174,7 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutor do
   def execute_tool(tool_def, tool_args) do
     tool_def.module.run(tool_args)
   rescue
-    e -> {:error, {e, __STACKTRACE__}}
+    e -> {:error, BeamMePrompty.LLM.Errors.ToolError.exception(module: tool_def.module, cause: e)}
   end
 
   @doc """

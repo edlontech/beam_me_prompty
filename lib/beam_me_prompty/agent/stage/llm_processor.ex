@@ -126,7 +126,9 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
         _current_request_messages
       ) do
     log_llm_interaction(context, "max_iterations_reached", %{iterations: 0})
-    {:error, :max_tool_iterations_reached, context.message_history, context.current_agent_state}
+
+    {:error, BeamMePrompty.Errors.Framework.exception(cause: :max_tool_iterations_reached),
+     context.message_history, context.current_agent_state}
   end
 
   def process_llm_interactions(%Context{} = context, current_request_messages) do
@@ -361,9 +363,22 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
 
   defp validate_llm_config(config) do
     cond do
-      is_nil(config.model) -> {:error, :missing_model}
-      is_nil(config.llm_client) -> {:error, :missing_llm_client}
-      true -> {:ok, config}
+      is_nil(config.model) ->
+        {:error,
+         BeamMePrompty.LLM.Errors.InvalidConfig.exception(
+           module: __MODULE__,
+           cause: :missing_model
+         )}
+
+      is_nil(config.llm_client) ->
+        {:error,
+         BeamMePrompty.LLM.Errors.InvalidConfig.exception(
+           module: __MODULE__,
+           cause: :missing_llm_client
+         )}
+
+      true ->
+        {:ok, config}
     end
   end
 

@@ -37,35 +37,56 @@ defmodule BeamMePrompty.Agent.Stage.Config do
   Validates stage configuration.
   """
   def validate_stage_config(node_def) do
-    with {:ok, _} <- validate_llm_config(node_def.llm),
-         {:ok, _} <- validate_tools_config(node_def.tools || []) do
+    with {:ok, _llm_validation_result} <- validate_llm_config(node_def.llm),
+         {:ok, _tools_validation_result} <- validate_tools_config(node_def.tools || []) do
       :ok
-    else
-      error -> {:error, {:invalid_stage_config, error}}
     end
   end
 
   defp validate_llm_config([config | _rest]) when is_map(config) do
     cond do
-      is_nil(config.model) -> {:error, :missing_model}
-      is_nil(config.llm_client) -> {:error, :missing_llm_client}
-      true -> {:ok, config}
+      is_nil(config.model) ->
+        {:error,
+         BeamMePrompty.LLM.Errors.InvalidConfig.exception(
+           module: __MODULE__,
+           cause: "LLM config missing :model in stage definition"
+         )}
+
+      is_nil(config.llm_client) ->
+        {:error,
+         BeamMePrompty.LLM.Errors.InvalidConfig.exception(
+           module: __MODULE__,
+           cause: "LLM config missing :llm_client in stage definition"
+         )}
+
+      true ->
+        {:ok, config}
     end
   end
 
   defp validate_llm_config([]) do
-    {:ok, :no_llm_config}
+    {:ok, :no_llm_config_present}
   end
 
   defp validate_llm_config(_invalid) do
-    {:error, :invalid_llm_config_format}
+    {:error,
+     BeamMePrompty.LLM.Errors.InvalidConfig.exception(
+       module: __MODULE__,
+       cause: "LLM config has invalid format, expected a list containing a map."
+     )}
   end
 
   defp validate_tools_config(tools) when is_list(tools) do
+    # Currently, tools are just a list, more specific validation can be added if needed.
+    # For now, if it's a list, it's considered structurally valid at this level.
     {:ok, tools}
   end
 
   defp validate_tools_config(_invalid) do
-    {:error, :invalid_tools_config}
+    {:error,
+     BeamMePrompty.LLM.Errors.InvalidConfig.exception(
+       module: __MODULE__,
+       cause: "Tools config has invalid format, expected a list."
+     )}
   end
 end

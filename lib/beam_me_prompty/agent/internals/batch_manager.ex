@@ -11,6 +11,8 @@ defmodule BeamMePrompty.Agent.Internals.BatchManager do
 
   require Logger
 
+  alias BeamMePrompty.Errors
+
   defstruct [
     :batch_details,
     :temp_results,
@@ -207,11 +209,17 @@ defmodule BeamMePrompty.Agent.Internals.BatchManager do
   `{:ok, {node_def, node_ctx}}` if found, `:error` if not found
   """
   @spec get_node_details(t(), node_name()) ::
-          {:ok, {node_definition(), node_context()}} | :error
+          {:ok, {node_definition(), node_context()}} | {:error, Errors.ExecutionError.t()}
   def get_node_details(%__MODULE__{} = batch, node_name) do
     case Map.get(batch.batch_details, node_name) do
-      nil -> :error
-      details -> {:ok, details}
+      nil ->
+        {:error,
+         Errors.ExecutionError.exception(
+           cause: "Node details not found in batch_details for node: #{inspect(node_name)}"
+         )}
+
+      details ->
+        {:ok, details}
     end
   end
 

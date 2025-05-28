@@ -42,6 +42,8 @@ defmodule BeamMePrompty.Errors.ExecutionError do
 
   use Splode.Error, fields: [:stage, :cause], class: :framework
 
+  @type t() :: Splode.Error.t()
+
   def message(%{stage: stage, cause: cause}) when not is_nil(stage) do
     "Internal agent execution error at/near stage #{inspect(stage)}: #{inspect(cause)}"
   end

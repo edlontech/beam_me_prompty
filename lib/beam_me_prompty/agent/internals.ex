@@ -263,7 +263,7 @@ defmodule BeamMePrompty.Agent.Internals do
 
         handle_progress_and_completion(data_after_stage_finish, batch_status)
 
-      :error ->
+      {:error, _reason} ->
         Logger.error("[Internals] Node details not found for #{node_name}")
         {:keep_state, updated_data}
     end
@@ -440,8 +440,15 @@ defmodule BeamMePrompty.Agent.Internals do
 
   def completed({:call, from}, {:get_node_result, node_name}, data) do
     case ResultManager.get_result(data.result_manager, node_name) do
-      {:ok, result} -> {:keep_state, data, [{:reply, from, {:ok, :completed, result}}]}
-      :error -> {:keep_state, data, [{:reply, from, {:error, :node_not_found}}]}
+      {:ok, result} ->
+        {:keep_state, data, [{:reply, from, {:ok, :completed, result}}]}
+
+      :error ->
+        {:keep_state, data,
+         [
+           {:reply, from,
+            {:error, BeamMePrompty.Errors.Framework.exception(cause: :node_not_found)}}
+         ]}
     end
   end
 

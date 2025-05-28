@@ -125,7 +125,7 @@ defmodule BeamMePrompty.Agent.Internals.BatchManagerTest do
 
     test "returns :error if node does not exist" do
       batch = BatchManager.new()
-      assert BatchManager.get_node_details(batch, :non_existent_node) == :error
+      assert {:error, _reason} = BatchManager.get_node_details(batch, :non_existent_node)
     end
   end
 

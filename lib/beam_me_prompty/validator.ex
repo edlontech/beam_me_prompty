@@ -28,7 +28,12 @@ defmodule BeamMePrompty.Validator do
     end
   end
 
-  def validate(_schema, data), do: {:error, "Invalid input data format: #{inspect(data)}"}
+  def validate(_schema, data),
+    do:
+      {:error,
+       BeamMePrompty.Errors.ValidationError.exception(
+         cause: "Invalid input data format: #{inspect(data)}"
+       )}
 
   defp format_cast_errors(errors) when is_list(errors) do
     Enum.map(errors, &format_cast_error/1)
