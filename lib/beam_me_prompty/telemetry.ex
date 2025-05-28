@@ -170,47 +170,7 @@ defmodule BeamMePrompty.Telemetry do
         status,
         response_or_error
       ) do
-    response_type =
-      case status do
-        :ok ->
-          cond do
-            is_map(response_or_error) and Map.has_key?(response_or_error, :function_call) ->
-              :function_call
-
-            # Assuming it's a list of content parts
-            is_list(response_or_error) ->
-              :list_of_parts
-
-            is_binary(response_or_error) ->
-              :text
-
-            # Could be structured response
-            is_map(response_or_error) ->
-              :map
-
-            true ->
-              :unknown_ok_response
-          end
-
-        :error ->
-          cond do
-            is_struct(response_or_error) ->
-              response_or_error.__struct__
-
-            is_atom(response_or_error) ->
-              response_or_error
-
-            is_map(response_or_error) and Map.has_key?(response_or_error, :__struct__) ->
-              Map.get(response_or_error, :__struct__)
-
-            # Generic map error if not a struct
-            is_map(response_or_error) ->
-              :map_error
-
-            true ->
-              :unknown_error
-          end
-      end
+    response_type = determine_llm_response_type(status, response_or_error)
 
     metadata = %{
       agent_module: agent_module,
@@ -227,6 +187,47 @@ defmodule BeamMePrompty.Telemetry do
       %{system_time: System.system_time(:nanosecond)},
       metadata
     )
+  end
+
+  defp determine_llm_response_type(:ok, response_or_error) do
+    cond do
+      is_map(response_or_error) and Map.has_key?(response_or_error, :function_call) ->
+        :function_call
+
+      # Assuming it's a list of content parts
+      is_list(response_or_error) ->
+        :list_of_parts
+
+      is_binary(response_or_error) ->
+        :text
+
+      # Could be structured response
+      is_map(response_or_error) ->
+        :map
+
+      true ->
+        :unknown_ok_response
+    end
+  end
+
+  defp determine_llm_response_type(:error, response_or_error) do
+    cond do
+      is_struct(response_or_error) ->
+        response_or_error.__struct__
+
+      is_atom(response_or_error) ->
+        response_or_error
+
+      is_map(response_or_error) and Map.has_key?(response_or_error, :__struct__) ->
+        Map.get(response_or_error, :__struct__)
+
+      # Generic map error if not a struct
+      is_map(response_or_error) ->
+        :map_error
+
+      true ->
+        :unknown_error
+    end
   end
 
   # --- Tool Execution Span ---
@@ -255,39 +256,7 @@ defmodule BeamMePrompty.Telemetry do
         status,
         result_or_error
       ) do
-    detail_type =
-      case status do
-        :ok ->
-          {:result_type, get_payload_type(result_or_error)}
-
-        :error ->
-          reason =
-            cond do
-              is_struct(result_or_error, BeamMePrompty.LLM.Errors.ToolError) ->
-                result_or_error.cause |> get_payload_type()
-
-              is_struct(result_or_error) ->
-                result_or_error.__struct__
-
-              is_atom(result_or_error) ->
-                result_or_error
-
-              is_map(result_or_error) and Map.has_key?(result_or_error, :__struct__) ->
-                Map.get(result_or_error, :__struct__)
-
-              is_map(result_or_error) ->
-                :map_error
-
-              # Handle {error_atom, stacktrace}
-              is_tuple(result_or_error) and elem(result_or_error, 1) == [] ->
-                elem(result_or_error, 0) |> get_payload_type()
-
-              true ->
-                :unknown_error
-            end
-
-          {:error_reason_type, reason}
-      end
+    detail_type = determine_tool_execution_detail_type(status, result_or_error)
 
     metadata =
       %{
@@ -304,5 +273,53 @@ defmodule BeamMePrompty.Telemetry do
       %{system_time: System.system_time(:nanosecond)},
       metadata
     )
+  end
+
+  defp determine_tool_execution_detail_type(:ok, result_or_error) do
+    {:result_type, get_payload_type(result_or_error)}
+  end
+
+  defp determine_tool_execution_detail_type(:error, result_or_error) do
+    reason = determine_tool_error_reason_type(result_or_error)
+    {:error_reason_type, reason}
+  end
+
+  defp determine_tool_error_reason_type(result_or_error) do
+    cond do
+      is_struct(result_or_error, BeamMePrompty.LLM.Errors.ToolError) ->
+        result_or_error.cause |> get_payload_type()
+
+      is_struct(result_or_error) ->
+        result_or_error.__struct__
+
+      is_atom(result_or_error) ->
+        result_or_error
+
+      is_map(result_or_error) ->
+        handle_map_error_type(result_or_error)
+
+      is_tuple(result_or_error) ->
+        handle_tuple_error_type(result_or_error)
+
+      true ->
+        :unknown_error
+    end
+  end
+
+  defp handle_map_error_type(result_or_error) do
+    if Map.has_key?(result_or_error, :__struct__) do
+      Map.get(result_or_error, :__struct__)
+    else
+      :map_error
+    end
+  end
+
+  defp handle_tuple_error_type(result_or_error) do
+    # Handle {error_atom, stacktrace}
+    if elem(result_or_error, 1) == [] do
+      elem(result_or_error, 0) |> get_payload_type()
+    else
+      :unknown_error
+    end
   end
 end

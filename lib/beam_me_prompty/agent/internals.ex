@@ -62,17 +62,7 @@ defmodule BeamMePrompty.Agent.Internals do
 
   @impl true
   def init({session_id, dag, input, initial_agent_state, opts, agent_module}) do
-    :telemetry.execute(
-      [:beam_me_prompty, :agent_execution, :start],
-      %{system_time: System.system_time(:nanosecond)},
-      %{
-        agent_module: agent_module,
-        session_id: session_id,
-        input_keys: Map.keys(input),
-        initial_state_keys: Map.keys(initial_agent_state),
-        opts_keys: Keyword.keys(opts)
-      }
-    )
+    Telemetry.agent_execution_start(agent_module, session_id, input, initial_agent_state, opts)
 
     Logger.debug(
       "[BeamMePrompty] Agent [#{inspect(agent_module)}](sid: #{inspect(session_id)}) initializing..."
