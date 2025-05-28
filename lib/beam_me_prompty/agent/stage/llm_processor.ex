@@ -350,7 +350,7 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
     do: log_llm_interaction(context.session_id, event, metadata)
 
   defp log_llm_interaction(session_id, event, metadata) do
-    Logger.debug("[BeamMePrompty] (sid: #{session_id}) LLMProcessor: #{event}")
+    Logger.debug("[BeamMePrompty] (sid: #{inspect(session_id)}) LLMProcessor: #{inspect(event)}")
     Logger.debug("#{inspect(metadata)}")
   end
 
