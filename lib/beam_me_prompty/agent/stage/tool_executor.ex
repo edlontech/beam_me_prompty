@@ -119,7 +119,13 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutor do
       tool_info.tool_args
     )
 
-    actual_tool_run_result = execute_tool(tool_def, tool_info.tool_args)
+    actual_tool_run_result =
+      execute_tool(tool_def, tool_info.tool_args, %{
+        memory_manager: current_agent_state[:memory_manager],
+        agent_module: agent_module,
+        session_id: session_id,
+        stage_name: stage_name
+      })
 
     {tool_result_status, agent_state_after_tool_result_cb} =
       AgentCallbacks.call_tool_result(
@@ -171,8 +177,12 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutor do
   @doc """
   Executes a tool with the given arguments, handling exceptions gracefully.
   """
-  def execute_tool(tool_def, tool_args) do
-    tool_def.module.run(tool_args)
+  def execute_tool(tool_def, tool_args, context \\ %{}) do
+    # Pass context to tools that need it (like memory tools)
+    case :erlang.function_exported(tool_def.module, :run, 2) do
+      true -> tool_def.module.run(tool_args, context)
+      false -> tool_def.module.run(tool_args)
+    end
   rescue
     e -> {:error, BeamMePrompty.LLM.Errors.ToolError.exception(module: tool_def.module, cause: e)}
   end

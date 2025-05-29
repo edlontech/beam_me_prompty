@@ -79,10 +79,18 @@ defmodule BeamMePrompty.Agent.Stage do
       "[BeamMePrompty] Agent [#{inspect(data.agent_module)}](sid: #{inspect(data.session_id)}) running node [#{inspect(node_name)}]"
     )
 
+    # Ensure memory_manager is in the agent state
+    agent_state_with_memory =
+      Map.put(
+        agent_state_from_ctx || %{},
+        :memory_manager,
+        node_ctx[:memory_manager]
+      )
+
     data_with_agent_context = %{
       data
       | agent_module: agent_module_from_ctx,
-        current_agent_state: agent_state_from_ctx
+        current_agent_state: agent_state_with_memory
     }
 
     AgentCallbacks.call_stage_start(

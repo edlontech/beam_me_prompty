@@ -284,7 +284,7 @@ defmodule BeamMePrompty.Agent.Executor do
     time_left = end_time - System.monotonic_time(:millisecond)
 
     if time_left <= 0 do
-      {:error, BeamMePrompty.Errors.Framework.exception(cause: :timeout)}
+      {:error, BeamMePrompty.Errors.ExecutionError.exception(cause: :timeout)}
     else
       receive do
         # Process terminated normally
@@ -294,7 +294,8 @@ defmodule BeamMePrompty.Agent.Executor do
               {:ok, results}
 
             _other ->
-              {:error, BeamMePrompty.Errors.Framework.exception(cause: :abnormal_termination)}
+              {:error,
+               BeamMePrompty.Errors.ExecutionError.exception(cause: :abnormal_termination)}
           end
 
         # Process crashed with an error
@@ -308,7 +309,8 @@ defmodule BeamMePrompty.Agent.Executor do
               {:ok, results}
 
             _other ->
-              {:error, BeamMePrompty.Errors.Framework.exception(cause: :incomplete_execution)}
+              {:error,
+               BeamMePrompty.Errors.ExecutionError.exception(cause: :incomplete_execution)}
           end
 
         # EXIT signal with error reason

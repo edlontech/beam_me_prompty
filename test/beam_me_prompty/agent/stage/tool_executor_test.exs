@@ -151,7 +151,7 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutorTest do
        agent_module, current_agent_state, stage_name, session_id} = sample_params()
 
       # Mock the tool module
-      expect(BeamMePrompty.WhatDoesTheFoxSayTool, :run, fn args ->
+      expect(BeamMePrompty.WhatDoesTheFoxSayTool, :run, fn args, _context ->
         assert args == %{"param" => "value"}
         {:ok, "tool result"}
       end)
@@ -242,7 +242,7 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutorTest do
        agent_module, current_agent_state, stage_name, session_id} = sample_params()
 
       # Mock the tool module to return error
-      expect(BeamMePrompty.WhatDoesTheFoxSayTool, :run, fn _args ->
+      expect(BeamMePrompty.WhatDoesTheFoxSayTool, :run, fn _args, _context ->
         {:error, "tool failed"}
       end)
 
@@ -313,7 +313,7 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutorTest do
       tool_def = sample_tool_def()
       tool_args = %{"param" => "value"}
 
-      expect(BeamMePrompty.WhatDoesTheFoxSayTool, :run, fn args ->
+      expect(BeamMePrompty.WhatDoesTheFoxSayTool, :run, fn args, _context ->
         assert args == tool_args
         {:ok, "success"}
       end)
@@ -326,7 +326,7 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutorTest do
       tool_def = sample_tool_def()
       tool_args = %{"param" => "value"}
 
-      expect(BeamMePrompty.WhatDoesTheFoxSayTool, :run, fn _args ->
+      expect(BeamMePrompty.WhatDoesTheFoxSayTool, :run, fn _args, _context ->
         raise "Something went wrong"
       end)
 
@@ -416,7 +416,7 @@ defmodule BeamMePrompty.Agent.Stage.ToolExecutorTest do
       end)
 
       # Mock the subsequent tool execution flow
-      expect(BeamMePrompty.WhatDoesTheFoxSayTool, :run, fn _args -> {:ok, "result"} end)
+      expect(BeamMePrompty.WhatDoesTheFoxSayTool, :run, fn _args, _context -> {:ok, "result"} end)
       expect(Telemetry, :tool_execution_start, fn _, _, _, _, _ -> :ok end)
       expect(Telemetry, :tool_execution_stop, fn _, _, _, _, _, _ -> :ok end)
       expect(MessageManager, :format_tool_result_message, fn _, _, _ -> [] end)

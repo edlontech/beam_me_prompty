@@ -15,7 +15,7 @@ defmodule BeamMePrompty.WhatDoesTheFoxSayTool do
     }
 
   @impl true
-  def run(%{"fox_species" => fox}) do
+  def run(%{"fox_species" => fox}, _context) do
     {:ok, "The fox #{fox} says ding ding ding"}
   end
 end

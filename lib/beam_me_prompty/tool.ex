@@ -68,6 +68,9 @@ defmodule BeamMePrompty.Tool do
 
     - `args`: A map containing the arguments to be passed to the tool,
       typically matching the schema defined in `:parameters` of `tool_info/0`.
+    - `context`: A map containing additional context that may be needed
+      for the tool's execution. This can include information about the LLM
+      making the request, such as its configuration or state.
 
   ## Returns
 
@@ -79,7 +82,7 @@ defmodule BeamMePrompty.Tool do
     - `{:error, reason}`: A tuple containing an error reason if the execution fails.
       The `reason` must be a `BeamMePrompty.LLM.Errors.ToolError.t()` struct.
   """
-  @callback run(map()) :: {:ok, map() | String.t()} | {:error, ToolError.t()}
+  @callback run(map(), map()) :: {:ok, map() | String.t()} | {:error, ToolError.t()}
 
   @doc """
   Provides information about the tool, used by LLMs to understand how to call it.

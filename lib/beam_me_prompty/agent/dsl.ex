@@ -339,6 +339,9 @@ defmodule BeamMePrompty.Agent.Dsl do
 
   use Spark.Dsl.Extension,
     sections: [@agent_section],
+    transformers: [
+      BeamMePrompty.Agent.Dsl.Transformers.InjectMemoryTools
+    ],
     verifiers: [
       BeamMePrompty.Agent.Dsl.Verifiers.HasStages,
       BeamMePrompty.Agent.Dsl.Verifiers.StagesAreValid

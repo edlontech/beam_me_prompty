@@ -15,7 +15,7 @@ defmodule BeamMePrompty.AgentTest do
     test "executes a simple agent" do
       input = %{"text" => "bonk bonk bonk"}
 
-      expect(BeamMePrompty.TestTool, :run, fn args ->
+      expect(BeamMePrompty.TestTool, :run, fn args, _context ->
         assert args == %{"val1" => "test1", "val2" => "test2"}
         {:ok, "Yes, it's a platypus"}
       end)
@@ -151,7 +151,7 @@ defmodule BeamMePrompty.AgentTest do
     end
 
     test "handles tool execution errors gracefully" do
-      expect(BeamMePrompty.TestTool, :run, fn _args ->
+      expect(BeamMePrompty.TestTool, :run, fn _args, _context ->
         {:error,
          ToolError.exception(
            module: BeamMePrompty.TestTool,
@@ -261,7 +261,7 @@ defmodule BeamMePrompty.AgentTest do
       input = %{"text" => "nested tools"}
 
       # Setup expectations for a chain of tool calls
-      expect(BeamMePrompty.TestTool, :run, 2, fn args ->
+      expect(BeamMePrompty.TestTool, :run, 2, fn args, _ ->
         case args do
           %{"val1" => "first_call"} -> {:ok, "First tool result"}
           %{"val1" => "second_call"} -> {:ok, "Second tool result"}
