@@ -77,7 +77,7 @@ defmodule BeamMePrompty.MixProject do
   end
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
-  defp elixirc_paths(_), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
 
   defp description() do
     "BeamMePrompty is an Elixir library for building and executing multi-stage agents against Large Language Models (LLMs). It provides a DSL to define agent stages, manage dependencies, validate inputs/outputs, and plug in custom LLM clients."
