@@ -46,7 +46,8 @@ defmodule BeamMePrompty.Agent.Internals do
     # Management components
     :result_manager,
     :batch_manager,
-    :progress_tracker
+    :progress_tracker,
+    :memory_manager
   ]
 
   alias BeamMePrompty.Agent.StagesSupervisor
@@ -57,6 +58,7 @@ defmodule BeamMePrompty.Agent.Internals do
   alias BeamMePrompty.Agent.Internals.ProgressTracker
   alias BeamMePrompty.Agent.Internals.ResultManager
   alias BeamMePrompty.Agent.Internals.StateManager
+  alias BeamMePrompty.Agent.MemoryManager
 
   alias BeamMePrompty.DAG
 
@@ -73,8 +75,15 @@ defmodule BeamMePrompty.Agent.Internals do
 
     case StagesSupervisor.start_link(:ok) do
       {:ok, sup_pid} ->
-        stage_workers = start_stage_workers(sup_pid, session_id, agent_module, dag.nodes)
         agent_config = agent_module.agent_config()
+        memory_manager = initialize_memory_manager(agent_module)
+
+        stage_workers =
+          start_stage_workers(sup_pid, session_id, agent_module, dag.nodes, memory_manager)
+
+        Logger.debug(
+          "[BeamMePrompty] Agent [#{inspect(agent_module)}](sid: #{inspect(session_id)}) initialized with #{Enum.count(MemoryManager.list_sources(memory_manager))} memory sources"
+        )
 
         data = %__MODULE__{
           agent_type: agent_config.agent_state,
@@ -90,6 +99,7 @@ defmodule BeamMePrompty.Agent.Internals do
           result_manager: ResultManager.new(),
           batch_manager: BatchManager.new(),
           progress_tracker: ProgressTracker.new(map_size(dag.nodes)),
+          memory_manager: memory_manager,
           nodes_to_execute: []
         }
 
@@ -159,13 +169,14 @@ defmodule BeamMePrompty.Agent.Internals do
 
   # Helper functions for waiting_for_plan state
 
-  defp start_stage_workers(supervisor_pid, session_id, agent_module, dag_nodes) do
+  defp start_stage_workers(supervisor_pid, session_id, agent_module, dag_nodes, memory_manager) do
     Enum.into(dag_nodes, %{}, fn {node_name, _node_definition} ->
       case StagesSupervisor.start_stage_worker(
              supervisor_pid,
              session_id,
              agent_module,
-             node_name
+             node_name,
+             memory_manager
            ) do
         {:ok, stage_pid} ->
           Logger.debug(
@@ -217,7 +228,8 @@ defmodule BeamMePrompty.Agent.Internals do
             dependency_results: current_results,
             global_input: data.global_input,
             agent_module: data.agent_module,
-            current_agent_state: data.current_state
+            current_agent_state: data.current_state,
+            memory_manager: data.memory_manager
           })
 
         {node_name, node_def, node_context}
@@ -494,6 +506,45 @@ defmodule BeamMePrompty.Agent.Internals do
   end
 
   # Helper functions
+
+  defp initialize_memory_manager(agent_module) do
+    agent_config = agent_module.agent_config()
+    memory_sources = Spark.Dsl.Extension.get_entities(agent_config, :memory_source)
+
+    case memory_sources do
+      [] ->
+        # No memory sources configured, return empty manager
+        MemoryManager.new()
+
+      sources ->
+        # Convert DSL memory sources to MemoryManager format
+        source_configs =
+          Enum.map(sources, fn memory_source ->
+            {memory_source.name, {memory_source.module, memory_source.opts}}
+          end)
+
+        memory_manager = MemoryManager.new(source_configs)
+
+        # Set default source if one is marked as default
+        case Enum.find(sources, & &1.default) do
+          nil ->
+            memory_manager
+
+          default_source ->
+            case MemoryManager.set_default_source(memory_manager, default_source.name) do
+              {:ok, updated_manager} -> updated_manager
+              {:error, _reason} -> memory_manager
+            end
+        end
+    end
+  rescue
+    error ->
+      Logger.warn(
+        "[BeamMePrompty] Failed to initialize memory manager: #{inspect(error)}. Using empty memory manager."
+      )
+
+      MemoryManager.new()
+  end
 
   defp cleanup_supervisor(data) do
     if data.stages_supervisor_pid && Process.alive?(data.stages_supervisor_pid) do

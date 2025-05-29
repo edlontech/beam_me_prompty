@@ -149,6 +149,17 @@ defmodule BeamMePrompty.Agent.Dsl do
     field :entrypoint, boolean(), default: false
   end
 
+  typedstruct module: MemorySource do
+    @moduledoc """
+    Represents a memory source configuration for an agent.
+    """
+
+    field :name, atom()
+    field :module, module()
+    field :opts, keyword(), default: []
+    field :default, boolean(), default: false
+  end
+
   @message_entity %Spark.Dsl.Entity{
     name: :message,
     args: [:role, :content],
@@ -254,6 +265,35 @@ defmodule BeamMePrompty.Agent.Dsl do
     ]
   }
 
+  @memory_source_entity %Spark.Dsl.Entity{
+    name: :memory_source,
+    args: [:name, :module],
+    describe: "Defines a memory source for the agent.",
+    target: MemorySource,
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "Name of the memory source."
+      ],
+      module: [
+        type: {:behaviour, BeamMePrompty.Agent.Memory},
+        required: true,
+        doc: "The memory implementation module."
+      ],
+      opts: [
+        type: :keyword_list,
+        default: [],
+        doc: "Options to pass to the memory module."
+      ],
+      default: [
+        type: :boolean,
+        default: false,
+        doc: "Whether this is the default memory source."
+      ]
+    ]
+  }
+
   @stage_entity %Spark.Dsl.Entity{
     name: :stage,
     args: [:name],
@@ -284,7 +324,8 @@ defmodule BeamMePrompty.Agent.Dsl do
   @agent_section %Spark.Dsl.Section{
     name: :agent,
     entities: [
-      @stage_entity
+      @stage_entity,
+      @memory_source_entity
     ],
     schema: [
       agent_state: [
