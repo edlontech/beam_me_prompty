@@ -127,7 +127,7 @@ defmodule BeamMePrompty.Agent.Stage.LLMProcessor do
       ) do
     log_llm_interaction(context, "max_iterations_reached", %{iterations: 0})
 
-    {:error, BeamMePrompty.Errors.Framework.exception(cause: :max_tool_iterations_reached),
+    {:error, BeamMePrompty.Errors.ExecutionError.exception(cause: :max_tool_iterations_reached),
      context.message_history, context.current_agent_state}
   end
 
