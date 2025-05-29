@@ -1,4 +1,5 @@
 defmodule BeamMePrompty.MixProject do
+  @moduledoc false
   use Mix.Project
 
   def project do
@@ -79,11 +80,11 @@ defmodule BeamMePrompty.MixProject do
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
-  defp description() do
+  defp description do
     "BeamMePrompty is an Elixir library for building and executing multi-stage agents against Large Language Models (LLMs). It provides a DSL to define agent stages, manage dependencies, validate inputs/outputs, and plug in custom LLM clients."
   end
 
-  defp package() do
+  defp package do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/edlontech/beam_me_prompty"},

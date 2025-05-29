@@ -347,4 +347,3 @@ defmodule BeamMePrompty.Agent.Internals.ResultManagerTest do
     end
   end
 end
-

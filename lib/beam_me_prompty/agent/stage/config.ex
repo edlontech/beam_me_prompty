@@ -16,6 +16,8 @@ defmodule BeamMePrompty.Agent.Stage.Config do
   @default_structured_response_validation true
   @default_message_history_limit 1000
 
+  alias BeamMePrompty.LLM.Errors
+
   @doc """
   Returns the default configuration for stage execution.
   """
@@ -47,14 +49,14 @@ defmodule BeamMePrompty.Agent.Stage.Config do
     cond do
       is_nil(config.model) ->
         {:error,
-         BeamMePrompty.LLM.Errors.InvalidConfig.exception(
+         Errors.InvalidConfig.exception(
            module: __MODULE__,
            cause: "LLM config missing :model in stage definition"
          )}
 
       is_nil(config.llm_client) ->
         {:error,
-         BeamMePrompty.LLM.Errors.InvalidConfig.exception(
+         Errors.InvalidConfig.exception(
            module: __MODULE__,
            cause: "LLM config missing :llm_client in stage definition"
          )}
@@ -70,7 +72,7 @@ defmodule BeamMePrompty.Agent.Stage.Config do
 
   defp validate_llm_config(_invalid) do
     {:error,
-     BeamMePrompty.LLM.Errors.InvalidConfig.exception(
+     Errors.InvalidConfig.exception(
        module: __MODULE__,
        cause: "LLM config has invalid format, expected a list containing a map."
      )}
@@ -84,7 +86,7 @@ defmodule BeamMePrompty.Agent.Stage.Config do
 
   defp validate_tools_config(_invalid) do
     {:error,
-     BeamMePrompty.LLM.Errors.InvalidConfig.exception(
+     Errors.InvalidConfig.exception(
        module: __MODULE__,
        cause: "Tools config has invalid format, expected a list."
      )}
