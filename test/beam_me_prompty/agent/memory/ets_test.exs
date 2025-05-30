@@ -215,7 +215,7 @@ defmodule BeamMePrompty.Agent.Memory.ETSTest do
 
       {:ok, results} = ETS.search(context, "temp:", [])
 
-      assert length(results) == 0
+      assert results == []
     end
 
     test "returns complete result structure", %{context: context} do

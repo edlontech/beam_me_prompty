@@ -83,7 +83,7 @@ defmodule BeamMePrompty.Tools.MemoryTools do
 
     defp build_opts(metadata, source) do
       opts = []
-      opts = if source, do: [{:source, String.to_atom(source)} | opts], else: opts
+      opts = if source, do: [{:source, String.to_existing_atom(source)} | opts], else: opts
       opts = if metadata[:ttl], do: [{:ttl, metadata[:ttl] * 1000} | opts], else: opts
       opts = if metadata[:tags], do: [{:metadata, %{tags: metadata[:tags]}} | opts], else: opts
       opts
@@ -119,7 +119,7 @@ defmodule BeamMePrompty.Tools.MemoryTools do
       memory_manager = get_memory_manager(context)
       source = Map.get(params, "memory_source")
 
-      opts = if source, do: [source: String.to_atom(source)], else: []
+      opts = if source, do: [source: String.to_existing_atom(source)], else: []
 
       case BeamMePrompty.Agent.MemoryManager.retrieve(memory_manager, key, opts) do
         {:ok, value} ->
@@ -174,7 +174,7 @@ defmodule BeamMePrompty.Tools.MemoryTools do
       source = Map.get(params, "memory_source")
 
       opts = [limit: limit]
-      opts = if source, do: [{:source, String.to_atom(source)} | opts], else: opts
+      opts = if source, do: [{:source, String.to_existing_atom(source)} | opts], else: opts
 
       case BeamMePrompty.Agent.MemoryManager.search(memory_manager, query, opts) do
         {:ok, results} ->
@@ -223,7 +223,7 @@ defmodule BeamMePrompty.Tools.MemoryTools do
       memory_manager = get_memory_manager(context)
       source = Map.get(params, "memory_source")
 
-      opts = if source, do: [source: String.to_atom(source)], else: []
+      opts = if source, do: [source: String.to_existing_atom(source)], else: []
 
       case BeamMePrompty.Agent.MemoryManager.delete(memory_manager, key, opts) do
         :ok ->
@@ -468,7 +468,7 @@ defmodule BeamMePrompty.Tools.MemoryTools do
 
       opts = [limit: limit]
       opts = if pattern, do: [{:pattern, pattern} | opts], else: opts
-      opts = if source, do: [{:source, String.to_atom(source)} | opts], else: opts
+      opts = if source, do: [{:source, String.to_existing_atom(source)} | opts], else: opts
 
       case BeamMePrompty.Agent.MemoryManager.list_keys(memory_manager, opts) do
         {:ok, keys} ->

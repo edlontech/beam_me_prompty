@@ -58,16 +58,7 @@ defmodule BeamMePrompty.Agent.Memory.ETS do
   def retrieve(context, key, opts) do
     case :ets.lookup(context.table, key) do
       [{^key, value, metadata}] ->
-        if expired?(metadata) do
-          :ets.delete(context.table, key)
-          {:error, :not_found}
-        else
-          if Keyword.get(opts, :include_metadata, false) do
-            {:ok, {value, metadata}}
-          else
-            {:ok, value}
-          end
-        end
+        handle_retrieved_value(context, key, value, metadata, opts)
 
       [] ->
         {:error, :not_found}
@@ -142,6 +133,23 @@ defmodule BeamMePrompty.Agent.Memory.ETS do
   end
 
   # Private helpers
+
+  defp handle_retrieved_value(context, key, value, metadata, opts) do
+    if expired?(metadata) do
+      :ets.delete(context.table, key)
+      {:error, :not_found}
+    else
+      format_retrieved_value(value, metadata, opts)
+    end
+  end
+
+  defp format_retrieved_value(value, metadata, opts) do
+    if Keyword.get(opts, :include_metadata, false) do
+      {:ok, {value, metadata}}
+    else
+      {:ok, value}
+    end
+  end
 
   defp expired?(%{ttl: nil}), do: false
 

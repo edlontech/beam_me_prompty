@@ -258,15 +258,7 @@ defmodule BeamMePrompty.Agent.MemoryManager do
 
         updated_sources = Map.delete(state.sources, name)
 
-        new_default =
-          if state.default_source == name do
-            case Map.keys(updated_sources) do
-              [] -> :default
-              [first | _] -> first
-            end
-          else
-            state.default_source
-          end
+        new_default = determine_new_default_source(state.default_source, name, updated_sources)
 
         new_state = %{state | sources: updated_sources, default_source: new_default}
         {:reply, :ok, new_state}
@@ -403,6 +395,17 @@ defmodule BeamMePrompty.Agent.MemoryManager do
 
   # Private Functions
 
+  defp determine_new_default_source(current_default, removed_source, remaining_sources) do
+    if current_default == removed_source do
+      case Map.keys(remaining_sources) do
+        [] -> :default
+        [first | _] -> first
+      end
+    else
+      current_default
+    end
+  end
+
   defp initialize_sources(sources) do
     with {:ok, source_contexts} <- validate_and_initialize_all(sources) do
       default_source =
@@ -433,10 +436,12 @@ defmodule BeamMePrompty.Agent.MemoryManager do
   end
 
   defp validate_and_initialize_source(name, module, opts) do
-    with {:ok, context} <- module.init(opts) do
-      {:ok, {module, context}}
-    else
-      {:error, reason} -> {:error, {name, reason}}
+    case module.init(opts) do
+      {:ok, context} ->
+        {:ok, {module, context}}
+
+      {:error, reason} ->
+        {:error, {name, reason}}
     end
   end
 
