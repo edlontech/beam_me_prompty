@@ -19,7 +19,7 @@ defmodule BeamMePrompty.Agent.MemoryManager do
       # Store in specific source
       MemoryManager.store(memory_manager, "key2", "value2", source: :long_term)
       
-      # Search in default source
+
       MemoryManager.search(memory_manager, "query")
       
       # Batch operations
@@ -213,8 +213,6 @@ defmodule BeamMePrompty.Agent.MemoryManager do
     GenServer.call(manager, {:clear, opts})
   end
 
-  # GenServer Callbacks
-
   @impl GenServer
   def init(sources) do
     case initialize_sources(sources) do
@@ -383,7 +381,6 @@ defmodule BeamMePrompty.Agent.MemoryManager do
 
   @impl GenServer
   def terminate(reason, state) do
-    # Terminate all memory sources
     for {_name, {module, context}} <- state.sources do
       if function_exported?(module, :terminate, 2) do
         module.terminate(context, reason)

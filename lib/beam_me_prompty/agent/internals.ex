@@ -40,8 +40,6 @@ defmodule BeamMePrompty.Agent.Internals do
     :opts,
 
     # Infrastructure
-    :stages_supervisor_pid,
-    :memory_supervisor_pid,
     :stage_workers,
     :memory_manager,
 
@@ -74,43 +72,33 @@ defmodule BeamMePrompty.Agent.Internals do
     {_init_status, current_agent_state} =
       StateManager.execute_init_callback(agent_module, dag, initial_agent_state)
 
-    # Start stages supervisor
-    case StagesSupervisor.start_link(:ok) do
-      {:ok, stages_sup_pid} ->
-        agent_config = agent_module.agent_config()
-        memory_sources = agent_module.memory_sources()
+    with {:ok, stages_sup_pid} <- StagesSupervisor.start_link(:ok),
+         {:ok, memory_manager_pid} <- start_memory_manager(agent_module.memory_sources()) do
+      stage_workers =
+        start_stage_workers(stages_sup_pid, session_id, agent_module, dag.nodes)
 
-        case initialize_memory_components(memory_sources) do
-          {:ok, memory_sup_pid, memory_manager_pid} ->
-            stage_workers =
-              start_stage_workers(stages_sup_pid, session_id, agent_module, dag.nodes)
+      agent_config = agent_module.agent_config()
 
-            data = %__MODULE__{
-              agent_type: agent_config.agent_state,
-              session_id: session_id,
-              dag: dag,
-              opts: opts,
-              agent_module: agent_module,
-              global_input: input,
-              initial_state: initial_agent_state,
-              current_state: current_agent_state,
-              stages_supervisor_pid: stages_sup_pid,
-              memory_supervisor_pid: memory_sup_pid,
-              stage_workers: stage_workers,
-              memory_manager: memory_manager_pid,
-              result_manager: ResultManager.new(),
-              batch_manager: BatchManager.new(),
-              progress_tracker: ProgressTracker.new(map_size(dag.nodes)),
-              nodes_to_execute: []
-            }
+      data = %__MODULE__{
+        agent_type: agent_config.agent_state,
+        session_id: session_id,
+        dag: dag,
+        opts: opts,
+        agent_module: agent_module,
+        global_input: input,
+        initial_state: initial_agent_state,
+        current_state: current_agent_state,
+        stage_workers: stage_workers,
+        memory_manager: memory_manager_pid,
+        result_manager: ResultManager.new(),
+        batch_manager: BatchManager.new(),
+        progress_tracker: ProgressTracker.new(map_size(dag.nodes)),
+        nodes_to_execute: []
+      }
 
-            actions = [{:next_event, :internal, :plan}]
-            {:ok, :waiting_for_plan, data, actions}
-
-          {:error, reason} ->
-            ErrorHandler.handle_supervisor_error(reason)
-        end
-
+      actions = [{:next_event, :internal, :plan}]
+      {:ok, :waiting_for_plan, data, actions}
+    else
       {:error, reason} ->
         ErrorHandler.handle_supervisor_error(reason)
     end
@@ -500,57 +488,12 @@ defmodule BeamMePrompty.Agent.Internals do
     end
   end
 
-  defp start_memory_supervisor() do
-    case DynamicSupervisor.start_link(strategy: :one_for_one) do
-      {:ok, pid} ->
-        Logger.debug("[BeamMePrompty] Memory supervisor started successfully: #{inspect(pid)}")
-        {:ok, pid}
-
-      {:error, reason} ->
-        Logger.error("[BeamMePrompty] Failed to start memory supervisor: #{inspect(reason)}")
-        {:error, reason}
-    end
-  end
-
-  defp initialize_memory_components(memory_sources) do
-    case start_memory_supervisor() do
-      {:ok, memory_sup_pid} ->
-        case start_memory_manager(memory_sup_pid, memory_sources) do
-          {:ok, memory_manager_pid} ->
-            {:ok, memory_sup_pid, memory_manager_pid}
-
-          {:error, reason} ->
-            DynamicSupervisor.stop(memory_sup_pid)
-            {:error, {:memory_manager_start_failed, reason}}
-        end
-
-      {:error, reason} ->
-        {:error, {:memory_supervisor_start_failed, reason}}
-    end
-  end
-
-  defp start_memory_manager(supervisor_pid, memory_sources) do
+  defp start_memory_manager(memory_sources) do
     memory_sources =
       Enum.map(memory_sources, fn source ->
         {source.name, {source.module, source.opts}}
       end)
 
-    child_spec = %{
-      id: :memory_manager,
-      start: {MemoryManager, :start_link, [memory_sources, []]},
-      restart: :permanent,
-      shutdown: 5000,
-      type: :worker
-    }
-
-    case DynamicSupervisor.start_child(supervisor_pid, child_spec) do
-      {:ok, pid} ->
-        Logger.debug("[BeamMePrompty] Memory manager started successfully: #{inspect(pid)}")
-        {:ok, pid}
-
-      {:error, reason} ->
-        Logger.error("[BeamMePrompty] Failed to start memory manager: #{inspect(reason)}")
-        {:error, reason}
-    end
+    MemoryManager.start_link(memory_sources)
   end
 end
