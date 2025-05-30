@@ -1,4 +1,4 @@
-defmodule BeamMePrompty.Agent.Memory.Ets do
+defmodule BeamMePrompty.Agent.Memory.ETS do
   @moduledoc """
   A simple ETS-based memory implementation for BeamMePrompty agents.
 

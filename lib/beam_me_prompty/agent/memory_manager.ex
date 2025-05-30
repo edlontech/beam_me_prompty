@@ -433,19 +433,10 @@ defmodule BeamMePrompty.Agent.MemoryManager do
   end
 
   defp validate_and_initialize_source(name, module, opts) do
-    with :ok <- Memory.validate_implementation(module),
-         {:ok, context} <- initialize_memory_source(module, opts) do
+    with {:ok, context} <- module.init(opts) do
       {:ok, {module, context}}
     else
       {:error, reason} -> {:error, {name, reason}}
-    end
-  end
-
-  defp initialize_memory_source(module, opts) do
-    if function_exported?(module, :init, 1) do
-      module.init(opts)
-    else
-      {:ok, %{module: module, opts: opts}}
     end
   end
 

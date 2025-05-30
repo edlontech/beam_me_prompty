@@ -127,6 +127,8 @@ defmodule BeamMePrompty.Tool do
         }
       end
 
+      def name, do: unquote(name)
+
       defoverridable tool_info: 0
     end
   end

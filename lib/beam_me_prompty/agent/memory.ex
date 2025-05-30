@@ -341,29 +341,4 @@ defmodule BeamMePrompty.Agent.Memory do
     info: 1,
     clear: 2
   ]
-
-  # Helper functions for implementations
-
-  @doc """
-  Validates that a module implements all required callbacks.
-  """
-  def validate_implementation(module) do
-    required_callbacks = [
-      store: 4,
-      retrieve: 3,
-      search: 3,
-      delete: 3,
-      list_keys: 2
-    ]
-
-    missing =
-      Enum.filter(required_callbacks, fn {fun, arity} ->
-        not function_exported?(module, fun, arity)
-      end)
-
-    case missing do
-      [] -> :ok
-      _ -> {:error, {:missing_callbacks, missing}}
-    end
-  end
 end

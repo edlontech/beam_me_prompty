@@ -324,8 +324,7 @@ defmodule BeamMePrompty.Agent.Dsl do
   @agent_section %Spark.Dsl.Section{
     name: :agent,
     entities: [
-      @stage_entity,
-      @memory_source_entity
+      @stage_entity
     ],
     schema: [
       agent_state: [
@@ -337,14 +336,22 @@ defmodule BeamMePrompty.Agent.Dsl do
     describe: "Defines an LLM agent with one or more stages."
   }
 
+  @memory_section %Spark.Dsl.Section{
+    name: :memory,
+    entities: [
+      @memory_source_entity
+    ],
+    schema: [],
+    describe: "Defines an LLM agent with one or more stages."
+  }
+
   use Spark.Dsl.Extension,
-    sections: [@agent_section],
+    sections: [
+      @agent_section,
+      @memory_section
+    ],
     transformers: [
       BeamMePrompty.Agent.Dsl.Transformers.InjectMemoryTools
-    ],
-    verifiers: [
-      BeamMePrompty.Agent.Dsl.Verifiers.HasStages,
-      BeamMePrompty.Agent.Dsl.Verifiers.StagesAreValid
     ]
 
   defmodule Part do

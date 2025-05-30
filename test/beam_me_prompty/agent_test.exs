@@ -5,6 +5,7 @@ defmodule BeamMePrompty.AgentTest do
   import ExUnit.CaptureLog
   import Hammox
 
+  alias BeamMePrompty.AgentWithMemory
   alias BeamMePrompty.LLM.Errors.ToolError
   alias BeamMePrompty.TestAgent
 
@@ -458,6 +459,17 @@ defmodule BeamMePrompty.AgentTest do
 
       assert {:ok, results} = DataPartAgent.run_sync(input)
       assert results.third_stage == "Data part handled"
+    end
+  end
+
+  describe "agent with memory" do
+    test "should have memory tools" do
+      BeamMePrompty.FakeLlmClient
+      |> expect(:completion, fn _, _, _, _, _ ->
+        {:ok, "First stage"}
+      end)
+
+      assert {:ok, _results} = AgentWithMemory.run_sync()
     end
   end
 end

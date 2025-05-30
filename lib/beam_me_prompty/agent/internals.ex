@@ -78,7 +78,7 @@ defmodule BeamMePrompty.Agent.Internals do
         agent_config = agent_module.agent_config()
 
         # Extract memory sources from opts or use defaults
-        memory_sources = get_memory_sources(opts)
+        memory_sources = agent_module.memory_sources()
 
         # Start memory manager under the supervisor
         case start_memory_manager(sup_pid, memory_sources) do
@@ -541,11 +541,12 @@ defmodule BeamMePrompty.Agent.Internals do
     end
   end
 
-  defp get_memory_sources(opts) do
-    Keyword.get(opts, :memory_sources, [])
-  end
-
   defp start_memory_manager(supervisor_pid, memory_sources) do
+    memory_sources =
+      Enum.map(memory_sources, fn source ->
+        {source.name, {source.module, source.opts}}
+      end)
+
     child_spec = %{
       id: :memory_manager,
       start: {MemoryManager, :start_link, [memory_sources, []]},
