@@ -239,6 +239,198 @@ defmodule BeamMePrompty.Tools.MemoryTools do
     end
   end
 
+  defmodule ListSources do
+    @moduledoc """
+    Tool for listing available memory sources and their capabilities.
+    """
+    use BeamMePrompty.Tool,
+      name: :memory_list_sources,
+      description: """
+      List all available memory sources and their capabilities. Useful for understanding what memory backends are available and how to query them.
+      """,
+      parameters_schema: %{
+        type: "object",
+        properties: %{
+          include_capabilities: %{
+            type: "boolean",
+            description: "Include detailed capability information for each source",
+            default: true
+          }
+        }
+      }
+
+    @impl true
+    def run(params, context) do
+      memory_manager = get_memory_manager(context)
+      include_capabilities = Map.get(params, "include_capabilities", true)
+
+      with {:ok, sources} <- get_sources_list(memory_manager),
+           {:ok, info} <- get_sources_info(memory_manager, include_capabilities) do
+        {:ok, format_sources_response(sources, info, include_capabilities)}
+      else
+        {:error, reason} ->
+          {:error, "Failed to list memory sources: #{inspect(reason)}"}
+      end
+    end
+
+    defp get_memory_manager(context) do
+      context[:memory_manager] || raise "Memory manager not available in context"
+    end
+
+    defp get_sources_list(memory_manager) do
+      try do
+        sources = BeamMePrompty.Agent.MemoryManager.list_sources(memory_manager)
+        {:ok, sources}
+      catch
+        :exit, reason -> {:error, reason}
+        error -> {:error, error}
+      end
+    end
+
+    defp get_sources_info(memory_manager, true) do
+      try do
+        info = BeamMePrompty.Agent.MemoryManager.info(memory_manager)
+        {:ok, info}
+      catch
+        :exit, reason -> {:error, reason}
+        error -> {:error, error}
+      end
+    end
+
+    defp get_sources_info(_memory_manager, false), do: {:ok, %{}}
+
+    defp format_sources_response(sources, info, include_capabilities) do
+      sources_data =
+        Enum.map(sources, fn {name, module} ->
+          base_info = %{
+            name: name,
+            module: module,
+            is_default: name == get_default_source_name(sources)
+          }
+
+          if include_capabilities do
+            source_info = Map.get(info, name, %{})
+
+            Map.merge(base_info, %{
+              type: Map.get(source_info, :type, :unknown),
+              capabilities: get_capabilities(module, source_info),
+              query_formats: get_query_formats(source_info),
+              size: Map.get(source_info, :size),
+              memory_usage: Map.get(source_info, :memory_usage)
+            })
+          else
+            base_info
+          end
+        end)
+
+      %{
+        total_sources: length(sources),
+        sources: sources_data,
+        usage_notes: get_usage_notes()
+      }
+    end
+
+    defp get_default_source_name(sources) do
+      case sources do
+        [{first_name, _} | _] -> first_name
+        [] -> :default
+      end
+    end
+
+    defp get_capabilities(module, source_info) do
+      optional_callbacks = [
+        :store_many,
+        :retrieve_many,
+        :count,
+        :update,
+        :delete_many,
+        :exists?,
+        :info,
+        :clear
+      ]
+
+      capabilities =
+        Enum.filter(optional_callbacks, fn callback ->
+          function_exported?(module, callback, get_arity(callback))
+        end)
+
+      # Add any capabilities reported by the source itself
+      source_capabilities = Map.get(source_info, :capabilities, [])
+
+      Enum.uniq(capabilities ++ source_capabilities)
+    end
+
+    defp get_arity(:store_many), do: 3
+    defp get_arity(:retrieve_many), do: 3
+    defp get_arity(:count), do: 3
+    defp get_arity(:update), do: 4
+    defp get_arity(:delete_many), do: 3
+    defp get_arity(:exists?), do: 3
+    defp get_arity(:info), do: 1
+    defp get_arity(:clear), do: 2
+    defp get_arity(_), do: 3
+
+    defp get_query_formats(source_info) do
+      type = Map.get(source_info, :type, :unknown)
+
+      case type do
+        :ets ->
+          [
+            "Pattern matching: {:pattern, pattern}",
+            "Key prefix: string prefix",
+            "Simple string queries"
+          ]
+
+        :redis ->
+          [
+            "Redis patterns: key* or key?",
+            "String queries for values"
+          ]
+
+        :vector ->
+          [
+            "Semantic queries: natural language strings",
+            "Vector similarity searches",
+            "Embedding-based queries"
+          ]
+
+        :sql ->
+          [
+            "SQL-like queries",
+            "Structured query maps"
+          ]
+
+        :graph ->
+          [
+            "Graph traversal queries",
+            "Cypher-like queries",
+            "Node/edge relationship queries"
+          ]
+
+        :file ->
+          [
+            "File path patterns",
+            "Content search strings"
+          ]
+
+        _ ->
+          [
+            "Implementation-specific query format",
+            "Check source documentation for details"
+          ]
+      end
+    end
+
+    defp get_usage_notes do
+      [
+        "Use 'memory_source' parameter in other memory tools to specify which source to use",
+        "If no source is specified, the default source will be used",
+        "Query formats depend on the memory backend type",
+        "Check capabilities to see which operations are supported by each source"
+      ]
+    end
+  end
+
   defmodule ListKeys do
     @moduledoc """
     Tool for listing available memory keys.
@@ -305,6 +497,7 @@ defmodule BeamMePrompty.Tools.MemoryTools do
       Retrieve,
       Search,
       Delete,
+      ListSources,
       ListKeys
     ]
   end

@@ -1,5 +1,6 @@
 Mox.defmock(BeamMePrompty.FakeLlmClient, for: BeamMePrompty.LLM)
 Mox.defmock(BeamMePrompty.TestTool, for: BeamMePrompty.Tool)
+Mox.defmock(BeamMePrompty.MockMemory, for: BeamMePrompty.Agent.Memory)
 
 Mimic.copy(BeamMePrompty.Agent.Internals.StateManager)
 Mimic.copy(BeamMePrompty.Errors.ExecutionError)
