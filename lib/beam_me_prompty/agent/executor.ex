@@ -21,7 +21,6 @@ defmodule BeamMePrompty.Agent.Executor do
     * `handle_tool_result/3` - Called after a tool execution completes
     * `handle_progress/2` - Periodically called to report execution progress
     * `handle_complete/2` - Called when all stages complete
-    * `handle_cleanup/2` - Called during termination to ensure resource cleanup
     * `handle_timeout/2` - Called when execution times out
     * `handle_pause/2` - Called when execution is paused
     * `handle_resume/2` - Called when execution is resumed
@@ -74,8 +73,6 @@ defmodule BeamMePrompty.Agent.Executor do
 
   @callback handle_complete(results :: map(), inner_state :: map()) ::
               {:ok, map()} | {:error, term()}
-
-  @callback handle_cleanup(execution_status :: :completed | :error, inner_state :: map()) :: :ok
 
   @callback handle_timeout(timeout_type :: :execution | :stage | :tool, inner_state :: map()) ::
               handle_error_response()
@@ -130,9 +127,6 @@ defmodule BeamMePrompty.Agent.Executor do
       def handle_complete(_results, state), do: {:ok, state}
 
       @doc false
-      def handle_cleanup(_execution_status, _state), do: :ok
-
-      @doc false
       def handle_timeout(_timeout_type, state), do: {:stop, :timeout}
 
       @doc false
@@ -152,7 +146,6 @@ defmodule BeamMePrompty.Agent.Executor do
                      handle_tool_result: 3,
                      handle_progress: 2,
                      handle_complete: 2,
-                     handle_cleanup: 2,
                      handle_timeout: 2,
                      handle_pause: 2,
                      handle_resume: 1

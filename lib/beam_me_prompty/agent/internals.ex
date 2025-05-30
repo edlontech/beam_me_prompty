@@ -41,6 +41,7 @@ defmodule BeamMePrompty.Agent.Internals do
 
     # Infrastructure
     :stages_supervisor_pid,
+    :memory_supervisor_pid,
     :stage_workers,
     :memory_manager,
 
@@ -73,18 +74,16 @@ defmodule BeamMePrompty.Agent.Internals do
     {_init_status, current_agent_state} =
       StateManager.execute_init_callback(agent_module, dag, initial_agent_state)
 
+    # Start stages supervisor
     case StagesSupervisor.start_link(:ok) do
-      {:ok, sup_pid} ->
+      {:ok, stages_sup_pid} ->
         agent_config = agent_module.agent_config()
-
-        # Extract memory sources from opts or use defaults
         memory_sources = agent_module.memory_sources()
 
-        # Start memory manager under the supervisor
-        case start_memory_manager(sup_pid, memory_sources) do
-          {:ok, memory_manager_pid} ->
+        case initialize_memory_components(memory_sources) do
+          {:ok, memory_sup_pid, memory_manager_pid} ->
             stage_workers =
-              start_stage_workers(sup_pid, session_id, agent_module, dag.nodes)
+              start_stage_workers(stages_sup_pid, session_id, agent_module, dag.nodes)
 
             data = %__MODULE__{
               agent_type: agent_config.agent_state,
@@ -95,7 +94,8 @@ defmodule BeamMePrompty.Agent.Internals do
               global_input: input,
               initial_state: initial_agent_state,
               current_state: current_agent_state,
-              stages_supervisor_pid: sup_pid,
+              stages_supervisor_pid: stages_sup_pid,
+              memory_supervisor_pid: memory_sup_pid,
               stage_workers: stage_workers,
               memory_manager: memory_manager_pid,
               result_manager: ResultManager.new(),
@@ -108,7 +108,7 @@ defmodule BeamMePrompty.Agent.Internals do
             {:ok, :waiting_for_plan, data, actions}
 
           {:error, reason} ->
-            ErrorHandler.handle_supervisor_error({:memory_manager_start_failed, reason})
+            ErrorHandler.handle_supervisor_error(reason)
         end
 
       {:error, reason} ->
@@ -468,13 +468,6 @@ defmodule BeamMePrompty.Agent.Internals do
     end
   end
 
-  def completed(:info, :cleanup, data) do
-    # This :cleanup event is an internal signal if we decide to use it before termination.
-    # Actual agent's handle_cleanup is called in GenStateMachine.terminate/3.
-    cleanup_supervisor(data)
-    {:keep_state, data}
-  end
-
   def completed(event_type, event_content, data) do
     ErrorHandler.handle_unexpected_event(:completed, event_type, event_content, data)
     {:keep_state, data}
@@ -489,41 +482,7 @@ defmodule BeamMePrompty.Agent.Internals do
       data.result_manager
     )
 
-    execution_status =
-      case reason do
-        :normal -> :completed
-        :shutdown -> :completed
-        {:shutdown, :completed} -> :completed
-        _ -> :error
-      end
-
-    if data.agent_module do
-      StateManager.execute_cleanup_callback(
-        data.agent_module,
-        execution_status,
-        data.current_state
-      )
-    end
-
-    # Cleanup memory manager first
-    cleanup_memory_manager(data)
-
-    # Then cleanup supervisor
-    cleanup_supervisor(data)
     :ok
-  end
-
-  defp cleanup_supervisor(data) do
-    if data.stages_supervisor_pid && Process.alive?(data.stages_supervisor_pid) do
-      DynamicSupervisor.stop(data.stages_supervisor_pid)
-    end
-  end
-
-  defp cleanup_memory_manager(data) do
-    if data.memory_manager && Process.alive?(data.memory_manager) do
-      Logger.debug("[BeamMePrompty] Stopping memory manager: #{inspect(data.memory_manager)}")
-      GenServer.stop(data.memory_manager, :normal, 5000)
-    end
   end
 
   defp find_entry_point_stage(nodes) do
@@ -538,6 +497,35 @@ defmodule BeamMePrompty.Agent.Internals do
 
       nil ->
         nodes |> Map.keys() |> List.first()
+    end
+  end
+
+  defp start_memory_supervisor() do
+    case DynamicSupervisor.start_link(strategy: :one_for_one) do
+      {:ok, pid} ->
+        Logger.debug("[BeamMePrompty] Memory supervisor started successfully: #{inspect(pid)}")
+        {:ok, pid}
+
+      {:error, reason} ->
+        Logger.error("[BeamMePrompty] Failed to start memory supervisor: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp initialize_memory_components(memory_sources) do
+    case start_memory_supervisor() do
+      {:ok, memory_sup_pid} ->
+        case start_memory_manager(memory_sup_pid, memory_sources) do
+          {:ok, memory_manager_pid} ->
+            {:ok, memory_sup_pid, memory_manager_pid}
+
+          {:error, reason} ->
+            DynamicSupervisor.stop(memory_sup_pid)
+            {:error, {:memory_manager_start_failed, reason}}
+        end
+
+      {:error, reason} ->
+        {:error, {:memory_supervisor_start_failed, reason}}
     end
   end
 

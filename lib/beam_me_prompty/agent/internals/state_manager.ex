@@ -231,22 +231,6 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   end
 
   @doc """
-  Executes the agent's handle_cleanup callback.
-
-  ## Parameters
-  - `agent_module`: The agent module to call
-  - `execution_status`: The final execution status
-  - `current_state`: Current agent state
-
-  ## Returns
-  The cleanup callback result (usually ignored)
-  """
-  @spec execute_cleanup_callback(agent_module(), atom(), agent_state()) :: any()
-  def execute_cleanup_callback(agent_module, execution_status, current_state) do
-    agent_module.handle_cleanup(execution_status, current_state)
-  end
-
-  @doc """
   Safely executes a callback with error handling.
 
   ## Parameters

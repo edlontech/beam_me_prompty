@@ -100,7 +100,6 @@ defmodule BeamMePrompty do
     * handle_tool_result/3
     * handle_progress/2
     * handle_complete/2
-    * handle_cleanup/2
     * handle_timeout/2
     * handle_pause/2
     * handle_resume/1

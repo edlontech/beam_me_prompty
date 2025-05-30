@@ -14,7 +14,6 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
     def handle_batch_complete(_results, _pending, state), do: {:ok, state}
     def handle_complete(_results, state), do: {:ok, state}
     def handle_error(_error, state), do: {:error, state}
-    def handle_cleanup(_status, _state), do: :ok
   end
 
   defmodule MockAgentWithOverride do
@@ -29,7 +28,6 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
 
     def handle_complete(_results, _state), do: {{:ok, :override_state}, :new_state}
     def handle_error(_error, state), do: {:error, state}
-    def handle_cleanup(_status, _state), do: :ok
   end
 
   defmodule MockAgentWithError do
@@ -41,7 +39,6 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
     def handle_batch_complete(_results, _pending, state), do: {:error, state}
     def handle_complete(_results, state), do: {:error, state}
     def handle_error(_error, state), do: {:error, state}
-    def handle_cleanup(_status, _state), do: :ok
   end
 
   defmodule MockAgentWithException do
@@ -53,7 +50,6 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
     def handle_batch_complete(_results, _pending, _state), do: raise("Test exception")
     def handle_complete(_results, _state), do: raise("Test exception")
     def handle_error(_error, _state), do: raise("Test exception")
-    def handle_cleanup(_status, _state), do: raise("Test exception")
   end
 
   describe "handle_callback_response/2" do
@@ -398,30 +394,6 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
 
       assert_raise RuntimeError, "Test exception", fn ->
         StateManager.execute_error_callback(MockAgentWithException, error_class, current_state)
-      end
-    end
-  end
-
-  describe "execute_cleanup_callback/3" do
-    test "executes cleanup callback" do
-      execution_status = :completed
-      current_state = "current"
-
-      result = StateManager.execute_cleanup_callback(MockAgent, execution_status, current_state)
-
-      assert result == :ok
-    end
-
-    test "handles cleanup callback that raises exception" do
-      execution_status = :failed
-      current_state = "current"
-
-      assert_raise RuntimeError, "Test exception", fn ->
-        StateManager.execute_cleanup_callback(
-          MockAgentWithException,
-          execution_status,
-          current_state
-        )
       end
     end
   end
