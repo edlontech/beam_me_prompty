@@ -16,7 +16,11 @@ A powerful Elixir library for building and orchestrating intelligent, prompt-dri
 - **📝 Template System**: Dynamic message templating with variable interpolation
 - **🔧 Type Safety**: Leverages Elixir's pattern matching and behaviours for robust agent definitions
 
+
+
 ## 🚀 Quick Start
+
+Note: This library is not production ready yet! Method signatures and functionalities are subject to big changes!
 
 ### Installation
 
@@ -25,7 +29,7 @@ Add `beam_me_prompty` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:beam_me_prompty, "~> 0.1.0"}
+    {:beam_me_prompty, github: "edlontech/beam_me_prompty", branch: "main"}
   ]
 end
 ```
@@ -281,12 +285,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE.md) f
 
 ## Roadmap
 
-[] OpenAI and Hugging Faces Client
-[] Streamming Spport
-[] Database Persisted Agents
-[] A2A Protocol
-[] MCP Protocol
-[] Real-time Observability
+- [] OpenAI and Hugging Faces Client
+- [] Streamming Support
+- [] Database Persisted Agents
+- [] A2A Protocol
+- [] MCP Protocol
+- [] Real-time Observability
 
 ---
 
