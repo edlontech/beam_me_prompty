@@ -17,6 +17,13 @@ defmodule BeamMePrompty.Agent.ExecutorOptions do
               doc: """
               A unique identifier for the agent executor instance. Used for logging and monitoring.
               """
+            ],
+            hibernate_after: [
+              type: :timeout,
+              doc: """
+              Time in milliseconds after which the GenStateMachine process will hibernate if no messages are received.
+              This helps reduce memory usage for idle processes. Defaults to :infinity (no hibernation).
+              """
             ]
           )
 

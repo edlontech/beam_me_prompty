@@ -257,12 +257,18 @@ defmodule BeamMePrompty.Agent.Executor do
     session_id = Keyword.get(opts, :session_id, make_ref())
 
     with :ok <- DAG.validate(dag),
-         {:ok, opts} <- ExecutorOptions.validate(opts) do
+         {:ok, validated_opts} <- ExecutorOptions.validate(opts) do
       init = {session_id, dag, input, state, opts, module}
 
-      GenStateMachine.start_link(BeamMePrompty.Agent.Internals, init,
-        name: executor_id(session_id)
-      )
+      genserver_opts = [name: executor_id(session_id)]
+
+      genserver_opts =
+        case Keyword.get(validated_opts, :hibernate_after) do
+          nil -> genserver_opts
+          hibernate_after -> Keyword.put(genserver_opts, :hibernate_after, hibernate_after)
+        end
+
+      GenStateMachine.start_link(BeamMePrompty.Agent.Internals, init, genserver_opts)
     end
   end
 
