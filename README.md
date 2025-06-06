@@ -16,8 +16,6 @@ A powerful Elixir library for building and orchestrating intelligent, prompt-dri
 - **📝 Template System**: Dynamic message templating with variable interpolation
 - **🔧 Type Safety**: Leverages Elixir's pattern matching and behaviours for robust agent definitions
 
-
-
 ## 🚀 Quick Start
 
 Note: This library is not production ready yet! Method signatures and functionalities are subject to big changes!
@@ -98,17 +96,8 @@ end
 Run an agent and wait for completion. This is the simplest way to execute an agent when you need immediate results:
 
 ```elixir
-# Basic synchronous execution
 input = %{"text" => "Hello, world!", "user_id" => 123}
 {:ok, results} = MyAgent.run_sync(input)
-IO.inspect(results)
-
-# With custom options and timeout
-opts = %{debug: true, log_level: :info}
-handlers = [MyCustomHandler]
-timeout_ms = 30_000  # 30 seconds
-
-{:ok, results} = MyAgent.run_sync(input, opts, handlers, timeout_ms)
 ```
 
 ### Asynchronous Execution
@@ -119,13 +108,6 @@ For long-running agents or when you need non-blocking execution:
 # Start agent asynchronously
 input = %{"task" => "complex_analysis", "dataset" => large_data}
 {:ok, pid} = BeamMePrompty.AgentManager.start_agent(MyAgent, input: input)
-
-# Check status
-case BeamMePrompty.Agent.Executor.get_status(pid) do
-  :running -> IO.puts("Agent is still processing...")
-  :completed -> IO.puts("Agent completed!")
-  :failed -> IO.puts("Agent failed!")
-end
 
 # Get results when ready
 {:ok, :completed, results} = BeamMePrompty.Agent.Executor.get_results(pid)
@@ -178,7 +160,7 @@ defmodule MyWeatherAgent do
     stage :weather_lookup do
       llm "gpt-4", BeamMePrompty.LLM.GoogleGemini do
         message :system, [text_part("You are a weather assistant.")]
-        message :user, [text_part("What's the weather in {{city}}?")]
+        message :user, [text_part("What's the weather in <%= city %>")]
         
         tools [MyApp.Tools.WeatherAPI]
       end
@@ -238,23 +220,6 @@ defmodule MyApp.LLM.CustomProvider do
 end
 ```
 
-## 📚 Advanced Features
-
-### Message Templates
-
-BeamMePrompty supports dynamic message templating with EEX variable interpolation:
-
-```elixir
-# Template variables from input
-message :user, [text_part("Hello {{user_name}}, today is {{date}}")]
-
-# Reference results from previous stages
-message :user, [text_part("Process this data: {{ previous_stage.result }}")]
-
-# Nested data access
-message :user, [text_part("User info: {{ user.profile.name }} ({{user.profile.email}})")]
-```
-
 ## 🤝 Contributing
 
 We welcome contributions! Please follow these steps:
@@ -285,12 +250,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE.md) f
 
 ## Roadmap
 
-- [] OpenAI and Hugging Faces Client
-- [] Streamming Support
-- [] Database Persisted Agents
-- [] A2A Protocol
-- [] MCP Protocol
-- [] Real-time Observability
+- [ ] OpenAI and Hugging Faces Client
+- [ ] Streamming Support
+- [ ] Better Telemetry
+- [ ] More default memories implementation
+- [ ] Database Persisted Agents
+- [ ] A2A Protocol
+- [ ] MCP Protocol
+- [ ] Real-time Observability
 
 ---
 

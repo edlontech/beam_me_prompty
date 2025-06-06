@@ -184,7 +184,8 @@ defmodule BeamMePrompty.Agent.Executor do
 
   The message is wrapped in a `{:user, [message]}` tuple before being cast.
   """
-  @spec message_agent(pid() | reference(), BeamMePrompty.Agent.Dsl.Part.parts()) :: :ok
+  @spec message_agent(pid() | reference(), BeamMePrompty.Agent.Dsl.Part.parts()) ::
+          :ok | {:error, term()}
   def message_agent(pid, message) when is_pid(pid) do
     do_send_message(pid, message)
   end

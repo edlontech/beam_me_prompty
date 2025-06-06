@@ -73,7 +73,6 @@ defmodule BeamMePrompty.MixProject do
       {:hammox, "~> 0.7", only: :test},
       {:mimic, "~> 1.12", only: :test},
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
-      {:mustache, "~> 0.5"},
       {:nimble_options, "~> 1.1"},
       {:open_api_spex, "~> 3.21"},
       {:plug, "~> 1.7"},
