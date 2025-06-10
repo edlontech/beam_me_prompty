@@ -143,10 +143,7 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
 
     generation_config =
       if llm_params[:response_schema] do
-        %{
-          generation_config
-          | response_mime_type: "application/json"
-        }
+        Map.put(generation_config, :response_mime_type, "application/json")
       else
         generation_config
       end
