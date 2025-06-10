@@ -136,7 +136,7 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
         top_p: llm_params[:top_p],
         temperature: llm_params[:temperature],
         max_output_tokens: llm_params[:max_output_tokens],
-        thinking_budget: llm_params[:thinking_budget],
+        thinking_config: llm_params[:thinking_config],
         response_schema: llm_params[:response_schema]
       }
       |> Map.reject(fn {_k, v} -> is_nil(v) end)

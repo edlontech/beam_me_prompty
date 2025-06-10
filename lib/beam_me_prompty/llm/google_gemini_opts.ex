@@ -46,8 +46,17 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
               OpenAPI 3.0 schema for the response, if filled, will enable the structured response feature
               """
             ],
-            thinking_budget: [
-              type: :non_neg_integer,
+            thinking_config: [
+              type: :keyword_list,
+              keys: [
+                thinking_budget: [
+                  required: true,
+                  type: :non_neg_integer,
+                  doc: """
+                  The maximum number of tokens to use for the thinking budget. Minimum of 1024 tokens.
+                  """
+                ]
+              ],
               doc: """
               The maximum number of tokens to use for the thinking budget. Minimum of 1024 tokens.
               """
@@ -86,10 +95,10 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
           config.api_key
           |> api_key(),
         response_schema: config.structured_response,
-        thinking_budget: config.thinking_budget,
         tools: parse_dsl_tools(tools),
         model: model
       ]
+      |> maybe_add_thinking_config(config)
       |> Keyword.reject(fn {_, v} -> is_nil(v) end)
 
     case NimbleOptions.validate(config, @schema) do
@@ -98,6 +107,18 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
 
       {:error, error} ->
         {:error, InvalidConfig.exception(module: __MODULE__, cause: error.message)}
+    end
+  end
+
+  defp maybe_add_thinking_config(parsed_config, config) do
+    if config.thinking_budget do
+      Keyword.merge(parsed_config,
+        thinking_config: [
+          thinking_budget: config.thinking_budget
+        ]
+      )
+    else
+      parsed_config
     end
   end
 
