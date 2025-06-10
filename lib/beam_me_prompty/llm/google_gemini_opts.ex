@@ -47,7 +47,7 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
               """
             ],
             thinking_config: [
-              type: :keyword_list,
+              type: :map,
               keys: [
                 thinking_budget: [
                   required: true,
@@ -113,9 +113,9 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
   defp maybe_add_thinking_config(parsed_config, config) do
     if config.thinking_budget do
       Keyword.merge(parsed_config,
-        thinking_config: [
+        thinking_config: %{
           thinking_budget: config.thinking_budget
-        ]
+        }
       )
     else
       parsed_config
