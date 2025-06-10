@@ -171,6 +171,14 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
   defp parse_response({:ok, %Req.Response{status: status, body: body}}) when status in 500..599,
     do: {:error, UnexpectedLLMResponse.exception(module: __MODULE__, status: status, cause: body)}
 
+  defp parse_response({:error, err}),
+    do:
+      {:error,
+       UnexpectedLLMResponse.exception(
+         module: __MODULE__,
+         cause: err
+       )}
+
   defp get_candidate_content(%{"text" => text_content}) when is_binary(text_content),
     do: {:ok, %TextPart{text: text_content}}
 
