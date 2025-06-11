@@ -1,0 +1,23 @@
+{
+  "id": "chatcmpl-123",
+  "object": "chat.completion",
+  "created": 1677652288,
+  "model": "gpt-4o",
+  "system_fingerprint": "fp_44709d6fcb",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Why don't scientists trust atoms?\n\nBecause they make up everything!\n\n---\n\n...Okay, okay, I'll try harder. How about this one:\n\nParallel lines have so much in common. It's a shame they'll never meet.\n\n---\n\n...Still nothing? Alright, last one, I'm pulling out the big guns:\n\nWhy did the scarecrow win an award?\n\nBecause he was outstanding in his field!\n\n---\n\nDid any of those land? Or do I need to recalibrate my humor-meter? Maybe I should stick to writing instructions manuals... less pressure! Let me know! I'm always looking to improve my comedic timing!\n"
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 9,
+    "completion_tokens": 12,
+    "total_tokens": 21
+  }
+}
