@@ -1,19 +1,19 @@
-defmodule BeamMePrompty.Tools.Memory.Retrieve do
+defmodule BeamMePrompty.Agent.Tools.Memory.Delete do
   @moduledoc """
-  Tool for retrieving information from agent memory.
+  Tool for deleting information from agent memory.
   """
   @moduledoc section: :memory_management
   use BeamMePrompty.Tool,
-    name: :memory_retrieve,
+    name: :memory_delete,
     description: """
-    Retrieve previously stored information from the agent's memory. Useful for accessing context or facts that were stored during previous stages.
+    Delete information from the agent's memory. Useful for removing outdated or incorrect facts.
     """,
     parameters: %{
       type: "object",
       properties: %{
         key: %{
           type: "string",
-          description: "The key of the memory item to retrieve"
+          description: "The key of the memory item to delete"
         },
         memory_source: %{
           type: "string",
@@ -23,8 +23,6 @@ defmodule BeamMePrompty.Tools.Memory.Retrieve do
       required: ["key"]
     }
 
-  alias BeamMePrompty.Agent.MemoryManager
-
   @impl true
   def run(%{"key" => key} = params, context) do
     memory_manager = get_memory_manager(context)
@@ -32,15 +30,12 @@ defmodule BeamMePrompty.Tools.Memory.Retrieve do
 
     opts = if source, do: [source: String.to_existing_atom(source)], else: []
 
-    case MemoryManager.retrieve(memory_manager, key, opts) do
-      {:ok, value} ->
-        {:ok, %{found: true, key: key, value: value}}
-
-      {:error, :not_found} ->
-        {:ok, %{found: false, key: key, message: "No memory found for key: #{key}"}}
+    case BeamMePrompty.Agent.MemoryManager.delete(memory_manager, key, opts) do
+      :ok ->
+        {:ok, %{status: "deleted", key: key}}
 
       {:error, reason} ->
-        {:error, "Failed to retrieve memory: #{inspect(reason)}"}
+        {:error, "Failed to delete memory: #{inspect(reason)}"}
     end
   end
 

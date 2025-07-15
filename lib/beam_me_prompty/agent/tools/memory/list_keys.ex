@@ -1,4 +1,4 @@
-defmodule BeamMePrompty.Tools.Memory.ListKeys do
+defmodule BeamMePrompty.Agent.Tools.Memory.ListKeys do
   @moduledoc """
   Tool for listing available memory keys.
   """

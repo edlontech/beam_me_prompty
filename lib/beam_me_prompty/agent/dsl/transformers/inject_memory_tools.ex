@@ -11,7 +11,7 @@ defmodule BeamMePrompty.Agent.Dsl.Transformers.InjectMemoryTools do
 
   use Spark.Dsl.Transformer
 
-  alias BeamMePrompty.Tools.MemoryTools
+  alias BeamMePrompty.Agent.Tools.Memory, as: MemoryTools
   alias Spark.Dsl.Transformer
 
   @doc false
