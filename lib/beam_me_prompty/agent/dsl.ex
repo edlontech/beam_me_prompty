@@ -197,7 +197,7 @@ defmodule BeamMePrompty.Agent.Dsl do
     field :frequency_penalty, float() | nil
     field :presence_penalty, float() | nil
     field :thinking_budget, integer() | nil
-    field :structured_response, OpenApiSpex.Schema.t() | nil
+    field :structured_response, map() | nil
     field :api_key, String.t() | function() | nil
     field :other_params, map() | nil
   end
@@ -534,5 +534,215 @@ defmodule BeamMePrompty.Agent.Dsl do
         thought_signature: thought_signature
       }
     end
+  end
+
+  # Jason.Encoder implementations for serialization support
+
+  defimpl Jason.Encoder, for: TextPart do
+    def encode(part, opts) do
+      %{
+        "__struct__" => "BeamMePrompty.Agent.Dsl.TextPart",
+        "type" => part.type,
+        "text" => part.text
+      }
+      |> Jason.Encode.map(opts)
+    end
+  end
+
+  defimpl Jason.Encoder, for: FilePart do
+    def encode(part, opts) do
+      encoded_file =
+        part.file
+        |> Enum.map(fn
+          {:bytes, bytes} when is_binary(bytes) ->
+            {"bytes", Base.encode64(bytes)}
+
+          {key, value} ->
+            {to_string(key), value}
+        end)
+        |> Map.new()
+
+      %{
+        "__struct__" => "BeamMePrompty.Agent.Dsl.FilePart",
+        "type" => part.type,
+        "file" => encoded_file
+      }
+      |> Jason.Encode.map(opts)
+    end
+  end
+
+  defimpl Jason.Encoder, for: DataPart do
+    def encode(part, opts) do
+      %{
+        "__struct__" => "BeamMePrompty.Agent.Dsl.DataPart",
+        "type" => part.type,
+        "data" => part.data
+      }
+      |> Jason.Encode.map(opts)
+    end
+  end
+
+  defimpl Jason.Encoder, for: FunctionResultPart do
+    def encode(part, opts) do
+      %{
+        "__struct__" => "BeamMePrompty.Agent.Dsl.FunctionResultPart",
+        "id" => part.id,
+        "name" => to_string(part.name),
+        "result" => part.result
+      }
+      |> Jason.Encode.map(opts)
+    end
+  end
+
+  defimpl Jason.Encoder, for: FunctionCallPart do
+    def encode(part, opts) do
+      %{
+        "__struct__" => "BeamMePrompty.Agent.Dsl.FunctionCallPart",
+        "function_call" => part.function_call
+      }
+      |> Jason.Encode.map(opts)
+    end
+  end
+
+  defimpl Jason.Encoder, for: ThoughtPart do
+    def encode(part, opts) do
+      %{
+        "__struct__" => "BeamMePrompty.Agent.Dsl.ThoughtPart",
+        "type" => part.type,
+        "thought_signature" => part.thought_signature
+      }
+      |> Jason.Encode.map(opts)
+    end
+  end
+
+  defimpl Jason.Encoder, for: Message do
+    def encode(message, opts) do
+      %{
+        "__struct__" => "BeamMePrompty.Agent.Dsl.Message",
+        "role" => message.role,
+        "content" => message.content
+      }
+      |> Jason.Encode.map(opts)
+    end
+  end
+
+  defimpl Jason.Encoder, for: LLMParams do
+    def encode(params, opts) do
+      encoded_params = %{
+        "__struct__" => "BeamMePrompty.Agent.Dsl.LLMParams",
+        "max_tokens" => params.max_tokens,
+        "temperature" => params.temperature,
+        "top_p" => params.top_p,
+        "top_k" => params.top_k,
+        "frequency_penalty" => params.frequency_penalty,
+        "presence_penalty" => params.presence_penalty,
+        "thinking_budget" => params.thinking_budget,
+        "structured_response" => params.structured_response,
+        "other_params" => params.other_params
+      }
+
+      # Handle function references for api_key
+      encoded_params =
+        case params.api_key do
+          fun when is_function(fun) ->
+            # Try to extract MFA if it's a captured function
+            case Function.info(fun) do
+              [{:module, module}, {:name, name}, {:arity, arity}] ->
+                Map.put(encoded_params, "api_key", %{
+                  "__type__" => "mfa",
+                  "module" => to_string(module),
+                  "function" => to_string(name),
+                  "arity" => arity
+                })
+
+              _ ->
+                # For anonymous functions, we can't serialize them
+                Map.put(encoded_params, "api_key", %{
+                  "__type__" => "function",
+                  "error" => "anonymous_function_not_serializable"
+                })
+            end
+
+          api_key when is_binary(api_key) ->
+            Map.put(encoded_params, "api_key", api_key)
+
+          nil ->
+            Map.put(encoded_params, "api_key", nil)
+        end
+
+      encoded_params
+      |> Jason.Encode.map(opts)
+    end
+  end
+
+  defimpl Jason.Encoder, for: LLM do
+    def encode(llm, opts) do
+      # Handle llm_client which can be a module or {module, opts} tuple
+      llm_client =
+        case llm.llm_client do
+          {module, client_opts} when is_atom(module) and is_list(client_opts) ->
+            # Convert keyword list to JSON-serializable format
+            serialized_opts =
+              client_opts
+              |> Enum.map(fn {key, value} -> [to_string(key), serialize_value(value)] end)
+
+            %{
+              "__type__" => "module_with_opts",
+              "module" => to_string(module),
+              "opts" => serialized_opts
+            }
+
+          module when is_atom(module) ->
+            to_string(module)
+        end
+
+      %{
+        "__struct__" => "BeamMePrompty.Agent.Dsl.LLM",
+        "model" => llm.model,
+        "llm_client" => llm_client,
+        "params" => llm.params,
+        "messages" => llm.messages,
+        "tools" => Enum.map(llm.tools, &to_string/1)
+      }
+      |> Jason.Encode.map(opts)
+    end
+
+    defp serialize_value(value) when is_atom(value), do: to_string(value)
+    defp serialize_value(value), do: value
+  end
+
+  defimpl Jason.Encoder, for: Stage do
+    def encode(stage, opts) do
+      %{
+        "__struct__" => "BeamMePrompty.Agent.Dsl.Stage",
+        "name" => stage.name,
+        "depends_on" => stage.depends_on,
+        "llm" => stage.llm,
+        "entrypoint" => stage.entrypoint
+      }
+      |> Jason.Encode.map(opts)
+    end
+  end
+
+  defimpl Jason.Encoder, for: MemorySource do
+    def encode(source, opts) do
+      # Convert keyword list to JSON-serializable format
+      serialized_opts =
+        source.opts
+        |> Enum.map(fn {key, value} -> [to_string(key), serialize_value(value)] end)
+
+      %{
+        "__struct__" => "BeamMePrompty.Agent.Dsl.MemorySource",
+        "name" => source.name,
+        "description" => source.description,
+        "module" => to_string(source.module),
+        "opts" => serialized_opts,
+        "default" => source.default
+      }
+      |> Jason.Encode.map(opts)
+    end
+
+    defp serialize_value(value) when is_atom(value), do: to_string(value)
+    defp serialize_value(value), do: value
   end
 end
