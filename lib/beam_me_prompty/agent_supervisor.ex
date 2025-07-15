@@ -1,4 +1,4 @@
-defmodule BeamMePrompty.AgentManager do
+defmodule BeamMePrompty.AgentSupervisor do
   @moduledoc """
   Manages the lifecycle of agent instances and their stages.
   """
