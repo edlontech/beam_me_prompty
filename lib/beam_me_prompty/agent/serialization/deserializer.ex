@@ -496,12 +496,10 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
   end
 
   defp deserialize_agent_config(agent_config) when is_map(agent_config) do
-    # Convert string keys to atoms for agent_config
     atomized_config =
       agent_config
       |> Enum.map(fn
         {"agent_state", value} -> {:agent_state, String.to_existing_atom(value)}
-        {"version", value} -> {:version, value}
         {key, value} -> {String.to_existing_atom(key), value}
       end)
       |> Map.new()
@@ -617,24 +615,20 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
   end
 
   defp resolve_module(module_str) when is_binary(module_str) do
-    try do
-      module = Module.concat([module_str])
+    module = Module.concat([module_str])
 
-      if Code.ensure_loaded?(module) do
-        {:ok, module}
-      else
-        {:error,
-         DeserializationError.exception(
-           cause: %{message: "Module not loaded", module: module_str}
-         )}
-      end
-    rescue
-      ArgumentError ->
-        {:error,
-         DeserializationError.exception(
-           cause: %{message: "Invalid module name", module: module_str}
-         )}
+    if Code.ensure_loaded?(module) do
+      {:ok, module}
+    else
+      {:error,
+       DeserializationError.exception(cause: %{message: "Module not loaded", module: module_str})}
     end
+  rescue
+    ArgumentError ->
+      {:error,
+       DeserializationError.exception(
+         cause: %{message: "Invalid module name", module: module_str}
+       )}
   end
 
   defp resolve_module(input) do
@@ -643,24 +637,22 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
   end
 
   defp resolve_function_module(module_str) when is_binary(module_str) do
-    try do
-      module = Module.concat([module_str])
+    module = Module.concat([module_str])
 
-      if Code.ensure_loaded?(module) do
-        {:ok, module}
-      else
-        {:error,
-         DeserializationError.exception(
-           cause: %{message: "Function module not loaded", module: module_str}
-         )}
-      end
-    rescue
-      ArgumentError ->
-        {:error,
-         DeserializationError.exception(
-           cause: %{message: "Invalid function module name", module: module_str}
-         )}
+    if Code.ensure_loaded?(module) do
+      {:ok, module}
+    else
+      {:error,
+       DeserializationError.exception(
+         cause: %{message: "Function module not loaded", module: module_str}
+       )}
     end
+  rescue
+    ArgumentError ->
+      {:error,
+       DeserializationError.exception(
+         cause: %{message: "Invalid function module name", module: module_str}
+       )}
   end
 
   defp resolve_function_module(input) do

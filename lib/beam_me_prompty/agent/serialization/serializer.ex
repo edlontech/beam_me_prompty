@@ -63,13 +63,7 @@ defmodule BeamMePrompty.Agent.Serialization.Serializer do
   """
   @spec serialize(serializable_agent()) :: {:ok, String.t()} | {:error, SerializationError.t()}
   def serialize(agent_definition) when is_map(agent_definition) do
-    serialized_definition = %{
-      agent: serialize_value(agent_definition.agent),
-      memory: serialize_value(agent_definition.memory),
-      agent_config: serialize_value(agent_definition.agent_config)
-    }
-
-    json_string = Jason.encode!(serialized_definition)
+    json_string = Jason.encode!(agent_definition)
 
     {:ok, json_string}
   rescue
@@ -82,80 +76,5 @@ defmodule BeamMePrompty.Agent.Serialization.Serializer do
 
   def serialize(input) do
     {:error, SerializationError.exception(cause: %{message: "Invalid input", input: input})}
-  end
-
-  # Recursive transformation functions
-
-  # Handle nil explicitly
-  defp serialize_value(nil), do: nil
-  defp serialize_value(data) when is_list(data), do: Enum.map(data, &serialize_value/1)
-  defp serialize_value(fun) when is_function(fun), do: serialize_function(fun)
-  defp serialize_value(%_{} = struct), do: serialize_struct(struct)
-
-  defp serialize_value(data) when is_map(data),
-    do: Map.new(data, fn {k, v} -> {serialize_value(k), serialize_value(v)} end)
-
-  defp serialize_value(data) when is_tuple(data), do: serialize_tuple(data)
-  defp serialize_value(atom) when is_atom(atom), do: serialize_atom(atom)
-
-  # Exclude PIDs
-  defp serialize_value(pid) when is_pid(pid), do: nil
-
-  # Pass through numbers, strings, etc.
-
-  defp serialize_value(other), do: other
-
-  defp serialize_struct(struct) do
-    struct
-    |> Map.from_struct()
-    |> Map.put("__struct__", serialize_module(struct.__struct__))
-    |> serialize_value()
-  end
-
-  defp serialize_function(fun) do
-    fun_info = :erlang.fun_info(fun)
-
-    case {fun_info[:module], fun_info[:name], fun_info[:arity]} do
-      {module, name, arity} when is_atom(module) and is_atom(name) and is_integer(arity) ->
-        name_str = Atom.to_string(name)
-
-        # Check if this is a generated function (contains _generated_ in the name)
-        if String.contains?(name_str, "_generated_") do
-          raise SerializationError.exception(
-                  cause:
-                    "Cannot serialize generated functions for persisted agents. " <>
-                      "Generated function: #{serialize_module(module)}.#{name_str}/#{arity}. " <>
-                      "Please use regular named functions instead."
-                )
-        end
-
-        %{
-          "__type__" => "mfa",
-          "module" => serialize_module(module),
-          "function" => serialize_atom(name),
-          "arity" => arity
-        }
-
-      _ ->
-        raise SerializationError.exception(
-                cause:
-                  "Cannot serialize anonymous functions for persisted agents. " <>
-                    "Please use regular named functions like &Module.function/arity instead."
-              )
-    end
-  end
-
-  defp serialize_module(module) when is_atom(module) do
-    module |> Module.split() |> Enum.join(".")
-  end
-
-  defp serialize_atom(nil), do: nil
-  defp serialize_atom(atom) when is_atom(atom), do: Atom.to_string(atom)
-
-  defp serialize_tuple(tuple) when is_tuple(tuple) do
-    %{
-      "__type__" => "tuple",
-      "elements" => tuple |> Tuple.to_list() |> Enum.map(&serialize_value/1)
-    }
   end
 end
