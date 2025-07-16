@@ -23,15 +23,19 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
     {:error, DeserializationError.exception(cause: %{message: "Invalid input", input: input})}
   end
 
-  defp deserialize_agent(%{"agent" => stages, "memory" => memory_sources, "opts" => opts}) do
+  defp deserialize_agent(%{
+         "agent" => stages,
+         "memory" => memory_sources,
+         "agent_config" => agent_config
+       }) do
     with {:ok, deserialized_stages} <- deserialize_stages(stages),
          {:ok, deserialized_memory} <- deserialize_memory_sources(memory_sources),
-         {:ok, deserialized_opts} <- deserialize_opts(opts) do
+         {:ok, deserialized_agent_config} <- deserialize_agent_config(agent_config) do
       {:ok,
        %{
          agent: deserialized_stages,
          memory: deserialized_memory,
-         opts: deserialized_opts
+         agent_config: deserialized_agent_config
        }}
     end
   end
@@ -80,8 +84,32 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
   end
 
   defp deserialize_llm(nil), do: {:ok, nil}
+  defp deserialize_llm([]), do: {:ok, []}
 
-  defp deserialize_llm(%{"__struct__" => "BeamMePrompty.Agent.Dsl.LLM"} = llm_data) do
+  defp deserialize_llm(llm_data) when is_list(llm_data) do
+    llm_data
+    |> Enum.reduce_while({:ok, []}, fn llm_item, {:ok, acc} ->
+      case deserialize_llm_item(llm_item) do
+        {:ok, llm} -> {:cont, {:ok, [llm | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, llms} -> {:ok, Enum.reverse(llms)}
+      error -> error
+    end
+  end
+
+  defp deserialize_llm(llm_data) when is_map(llm_data) do
+    deserialize_llm_item(llm_data)
+  end
+
+  defp deserialize_llm(input) do
+    {:error,
+     DeserializationError.exception(cause: %{message: "Invalid LLM structure", input: input})}
+  end
+
+  defp deserialize_llm_item(%{"__struct__" => "BeamMePrompty.Agent.Dsl.LLM"} = llm_data) do
     with {:ok, llm_client} <- deserialize_llm_client(llm_data["llm_client"]),
          {:ok, params} <- deserialize_llm_params(llm_data["params"]),
          {:ok, messages} <- deserialize_messages(llm_data["messages"]),
@@ -97,9 +125,9 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
     end
   end
 
-  defp deserialize_llm(input) do
+  defp deserialize_llm_item(input) do
     {:error,
-     DeserializationError.exception(cause: %{message: "Invalid LLM structure", input: input})}
+     DeserializationError.exception(cause: %{message: "Invalid LLM item structure", input: input})}
   end
 
   defp deserialize_llm_client(%{
@@ -110,6 +138,14 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
     with {:ok, module} <- resolve_module(module_str),
          {:ok, deserialized_opts} <- deserialize_keyword_list(opts) do
       {:ok, {module, deserialized_opts}}
+    end
+  end
+
+  defp deserialize_llm_client(%{"__type__" => "tuple", "elements" => elements}) do
+    case deserialize_tuple_elements(elements) do
+      {:ok, [module, opts]} when is_atom(module) and is_list(opts) -> {:ok, {module, opts}}
+      {:ok, deserialized_elements} -> {:ok, List.to_tuple(deserialized_elements)}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -125,8 +161,34 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
   end
 
   defp deserialize_llm_params(nil), do: {:ok, nil}
+  defp deserialize_llm_params([]), do: {:ok, []}
 
-  defp deserialize_llm_params(
+  defp deserialize_llm_params(params_data) when is_list(params_data) do
+    params_data
+    |> Enum.reduce_while({:ok, []}, fn param_item, {:ok, acc} ->
+      case deserialize_llm_params_item(param_item) do
+        {:ok, params} -> {:cont, {:ok, [params | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, params_list} -> {:ok, Enum.reverse(params_list)}
+      error -> error
+    end
+  end
+
+  defp deserialize_llm_params(params_data) when is_map(params_data) do
+    deserialize_llm_params_item(params_data)
+  end
+
+  defp deserialize_llm_params(input) do
+    {:error,
+     DeserializationError.exception(
+       cause: %{message: "Invalid LLM params structure", input: input}
+     )}
+  end
+
+  defp deserialize_llm_params_item(
          %{"__struct__" => "BeamMePrompty.Agent.Dsl.LLMParams"} = params_data
        ) do
     with {:ok, api_key} <- deserialize_api_key(params_data["api_key"]) do
@@ -146,10 +208,10 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
     end
   end
 
-  defp deserialize_llm_params(input) do
+  defp deserialize_llm_params_item(input) do
     {:error,
      DeserializationError.exception(
-       cause: %{message: "Invalid LLM params structure", input: input}
+       cause: %{message: "Invalid LLM params item structure", input: input}
      )}
   end
 
@@ -398,7 +460,8 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
     {:ok, String.to_existing_atom(atom_str)}
   rescue
     ArgumentError ->
-      {:error, DeserializationError.exception(cause: %{message: "Invalid binary data"})}
+      {:error,
+       DeserializationError.exception(cause: %{message: "Atom not found", atom: atom_str})}
   end
 
   defp deserialize_atom(atom) when is_atom(atom), do: {:ok, atom}
@@ -432,13 +495,15 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
      )}
   end
 
-  defp deserialize_opts(opts) when is_list(opts) do
-    deserialize_keyword_list(opts)
+  defp deserialize_agent_config(agent_config) when is_map(agent_config) do
+    {:ok, agent_config}
   end
 
-  defp deserialize_opts(input) do
+  defp deserialize_agent_config(input) do
     {:error,
-     DeserializationError.exception(cause: %{message: "Invalid opts structure", input: input})}
+     DeserializationError.exception(
+       cause: %{message: "Invalid agent_config structure", input: input}
+     )}
   end
 
   defp deserialize_keyword_list(nil), do: {:ok, []}
@@ -449,6 +514,9 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
       keyword_list
       |> Enum.map(fn
         [key_str, value] when is_binary(key_str) ->
+          {String.to_existing_atom(key_str), deserialize_keyword_value(value)}
+
+        %{"__type__" => "tuple", "elements" => [key_str, value]} when is_binary(key_str) ->
           {String.to_existing_atom(key_str), deserialize_keyword_value(value)}
 
         _ ->
@@ -485,8 +553,72 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
 
   defp deserialize_keyword_value(value), do: value
 
+  defp deserialize_tuple_elements(elements) when is_list(elements) do
+    elements
+    |> Enum.reduce_while({:ok, []}, fn element, {:ok, acc} ->
+      case deserialize_element(element) do
+        {:ok, deserialized_element} -> {:cont, {:ok, [deserialized_element | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, elements} -> {:ok, Enum.reverse(elements)}
+      error -> error
+    end
+  end
+
+  defp deserialize_element(%{"__type__" => "tuple", "elements" => elements}) do
+    case deserialize_tuple_elements(elements) do
+      {:ok, deserialized_elements} -> {:ok, List.to_tuple(deserialized_elements)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp deserialize_element(%{"__type__" => "mfa"} = mfa_data), do: deserialize_api_key(mfa_data)
+
+  defp deserialize_element(%{"__struct__" => _} = struct_data),
+    do: deserialize_struct_element(struct_data)
+
+  defp deserialize_element(atom_str) when is_binary(atom_str), do: deserialize_atom(atom_str)
+  defp deserialize_element(other), do: {:ok, other}
+
+  defp deserialize_struct_element(%{"__struct__" => module_str} = struct_data) do
+    with {:ok, module} <- resolve_module(module_str),
+         data = Map.drop(struct_data, ["__struct__"]),
+         {:ok, deserialized_data} <- deserialize_map_values(data) do
+      {:ok, struct!(module, deserialized_data)}
+    end
+  end
+
+  defp deserialize_map_values(map) when is_map(map) do
+    map
+    |> Enum.reduce_while({:ok, %{}}, fn {k, v}, {:ok, acc} ->
+      case deserialize_element(v) do
+        {:ok, deserialized_v} -> {:cont, {:ok, Map.put(acc, k, deserialized_v)}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
   defp resolve_module(module_str) when is_binary(module_str) do
-    {:ok, Module.concat([module_str])}
+    try do
+      module = Module.concat([module_str])
+
+      if Code.ensure_loaded?(module) do
+        {:ok, module}
+      else
+        {:error,
+         DeserializationError.exception(
+           cause: %{message: "Module not loaded", module: module_str}
+         )}
+      end
+    rescue
+      ArgumentError ->
+        {:error,
+         DeserializationError.exception(
+           cause: %{message: "Invalid module name", module: module_str}
+         )}
+    end
   end
 
   defp resolve_module(input) do
@@ -495,7 +627,24 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
   end
 
   defp resolve_function_module(module_str) when is_binary(module_str) do
-    {:ok, Module.concat([module_str])}
+    try do
+      module = Module.concat([module_str])
+
+      if Code.ensure_loaded?(module) do
+        {:ok, module}
+      else
+        {:error,
+         DeserializationError.exception(
+           cause: %{message: "Function module not loaded", module: module_str}
+         )}
+      end
+    rescue
+      ArgumentError ->
+        {:error,
+         DeserializationError.exception(
+           cause: %{message: "Invalid function module name", module: module_str}
+         )}
+    end
   end
 
   defp resolve_function_module(input) do

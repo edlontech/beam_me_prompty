@@ -34,7 +34,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
           }
         ],
         memory: [],
-        opts: []
+        agent_config: %{version: "0.1.0", agent_state: :stateless}
       }
 
       assert {:ok, json_string} = Serialization.serialize(agent_definition)
@@ -68,7 +68,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             default: true
           }
         ],
-        opts: []
+        agent_config: %{version: "0.1.0", agent_state: :stateless}
       }
 
       assert {:ok, json_string} = Serialization.serialize(agent_definition)
@@ -94,7 +94,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
           }
         ],
         memory: [],
-        opts: []
+        agent_config: %{version: "0.1.0", agent_state: :stateless}
       }
 
       assert {:ok, json_string} = Serialization.serialize(agent_definition)
@@ -134,7 +134,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
           }
         ],
         memory: [],
-        opts: []
+        agent_config: %{version: "0.1.0", agent_state: :stateless}
       }
 
       assert {:ok, json_string} = Serialization.serialize(agent_definition)
@@ -143,6 +143,54 @@ defmodule BeamMePrompty.Agent.SerializerTest do
 
     test "returns error for invalid input" do
       assert {:error, %SerializationError{}} = Serialization.serialize("invalid")
+    end
+
+    test "raises error for generated functions" do
+      # Get a generated function from FullAgent at runtime
+      generated_function =
+        BeamMePrompty.FullAgent.stages()
+        |> List.first()
+        |> Map.get(:llm)
+        |> List.first()
+        |> Map.get(:params)
+        |> List.first()
+        |> Map.get(:api_key)
+
+      agent_definition = %{
+        agent: [
+          %Dsl.Stage{
+            name: :first_stage,
+            depends_on: nil,
+            llm: [
+              %Dsl.LLM{
+                model: "test-model",
+                llm_client: BeamMePrompty.FakeLlmClient,
+                params: [
+                  %Dsl.LLMParams{
+                    api_key: generated_function
+                  }
+                ],
+                messages: [],
+                tools: []
+              }
+            ],
+            entrypoint: false
+          }
+        ],
+        memory: [],
+        agent_config: %{version: "0.1.0", agent_state: :stateless}
+      }
+
+      case Serialization.serialize(agent_definition) do
+        {:error, %SerializationError{cause: %SerializationError{cause: cause}}} ->
+          assert cause =~ "Cannot serialize generated functions"
+
+        {:error, %SerializationError{cause: cause}} when is_binary(cause) ->
+          assert cause =~ "Cannot serialize generated functions"
+
+        other ->
+          flunk("Expected serialization error for generated functions, got: #{inspect(other)}")
+      end
     end
 
     test "handles LLM client with options" do
@@ -162,7 +210,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
           }
         ],
         memory: [],
-        opts: []
+        agent_config: %{version: "0.1.0", agent_state: :stateless}
       }
 
       assert {:ok, json_string} = Serialization.serialize(agent_definition)
@@ -215,13 +263,13 @@ defmodule BeamMePrompty.Agent.SerializerTest do
           }
         ],
         "memory": [],
-        "opts": []
+        "agent_config": {"version": "0.1.0", "agent_state": "stateless"}
       }
       """
 
       assert {:ok, agent_definition} = Serialization.deserialize(json_string)
       assert is_map(agent_definition)
-      assert %{agent: [stage], memory: [], opts: []} = agent_definition
+      assert %{agent: [stage], memory: [], agent_config: agent_config} = agent_definition
       assert %Dsl.Stage{name: :first_stage} = stage
     end
 
@@ -239,12 +287,12 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             "default": true
           }
         ],
-        "opts": []
+        "agent_config": {"version": "0.1.0", "agent_state": "stateless"}
       }
       """
 
       assert {:ok, agent_definition} = Serialization.deserialize(json_string)
-      assert %{agent: [], memory: [memory_source], opts: []} = agent_definition
+      assert %{agent: [], memory: [memory_source], agent_config: agent_config} = agent_definition
 
       assert %Dsl.MemorySource{name: :short_term, module: BeamMePrompty.Agent.Memory.ETS} =
                memory_source
@@ -287,12 +335,12 @@ defmodule BeamMePrompty.Agent.SerializerTest do
           }
         ],
         "memory": [],
-        "opts": []
+        "agent_config": {"version": "0.1.0", "agent_state": "stateless"}
       }
       """
 
       assert {:ok, agent_definition} = Serialization.deserialize(json_string)
-      assert %{agent: [stage], memory: [], opts: []} = agent_definition
+      assert %{agent: [stage], memory: [], agent_config: agent_config} = agent_definition
       assert %Dsl.Stage{llm: %Dsl.LLM{params: %Dsl.LLMParams{api_key: api_key}}} = stage
       assert is_function(api_key, 1)
     end
@@ -343,12 +391,12 @@ defmodule BeamMePrompty.Agent.SerializerTest do
           }
         ],
         "memory": [],
-        "opts": []
+        "agent_config": {"version": "0.1.0", "agent_state": "stateless"}
       }
       """
 
       assert {:ok, agent_definition} = Serialization.deserialize(json_string)
-      assert %{agent: [stage], memory: [], opts: []} = agent_definition
+      assert %{agent: [stage], memory: [], agent_config: agent_config} = agent_definition
       assert %Dsl.Stage{llm: %Dsl.LLM{messages: [message]}} = stage
       assert %Dsl.Message{content: [text_part, data_part, file_part]} = message
       assert %Dsl.TextPart{text: "Hello"} = text_part
@@ -401,7 +449,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
           }
         ],
         "memory": [],
-        "opts": []
+        "agent_config": {"version": "0.1.0", "agent_state": "stateless"}
       }
       """
 
@@ -435,7 +483,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             default: true
           }
         ],
-        opts: []
+        agent_config: %{version: "0.1.0", agent_state: :stateless}
       }
 
       assert :ok = Serialization.validate(agent_definition)
@@ -449,7 +497,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
       agent_definition = %{
         agent: ["invalid_stage"],
         memory: [],
-        opts: []
+        agent_config: %{version: "0.1.0", agent_state: :stateless}
       }
 
       assert {:error, %BeamMePrompty.Errors.ValidationError{}} =
@@ -460,7 +508,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
       agent_definition = %{
         agent: [],
         memory: ["invalid_memory_source"],
-        opts: []
+        agent_config: %{version: "0.1.0", agent_state: :stateless}
       }
 
       assert {:error, %BeamMePrompty.Errors.ValidationError{}} =
@@ -524,14 +572,14 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             default: true
           }
         ],
-        opts: [session_id: "test-session"]
+        agent_config: %{version: "0.1.0", agent_state: :stateless, session_id: "test-session"}
       }
 
       assert {:ok, json_string} = Serialization.serialize(agent_definition)
       assert {:ok, deserialized_definition} = Serialization.deserialize(json_string)
       assert :ok = Serialization.validate(deserialized_definition)
 
-      assert %{agent: [stage1, stage2], memory: [memory_source], opts: opts} =
+      assert %{agent: [stage1, stage2], memory: [memory_source], agent_config: agent_config} =
                deserialized_definition
 
       assert %Dsl.Stage{name: :first_stage, depends_on: nil} = stage1
@@ -540,7 +588,8 @@ defmodule BeamMePrompty.Agent.SerializerTest do
       assert %Dsl.MemorySource{name: :short_term, module: BeamMePrompty.Agent.Memory.ETS} =
                memory_source
 
-      assert [session_id: "test-session"] = opts
+      assert %{"version" => "0.1.0", "agent_state" => "stateless", "session_id" => "test-session"} =
+               agent_config
     end
   end
 end
