@@ -57,35 +57,6 @@ defmodule BeamMePrompty.Agent.AgentSpec do
   end
 
   @doc """
-  Creates a new AgentSpec from a module that implements the standard agent interface.
-
-  This function extracts the agent specification from a compiled agent module
-  by calling its `stages/0`, `memory_sources/0`, and `agent_config/0` functions.
-  The module itself is used as the callback_module.
-
-  ## Parameters
-
-  - `module` - The agent module
-
-  ## Returns
-
-  - `{:ok, %AgentSpec{}}` - Successfully extracted specification
-  - `{:error, reason}` - Failed to extract specification
-  """
-  @spec from_module(module()) :: {:ok, t()} | {:error, term()}
-  def from_module(module) when is_atom(module) do
-    try do
-      stages = module.stages()
-      memory_sources = module.memory_sources()
-      agent_config = module.agent_config()
-
-      new(stages, memory_sources, agent_config, module)
-    rescue
-      error -> {:error, "Failed to extract spec from module #{module}: #{inspect(error)}"}
-    end
-  end
-
-  @doc """
   Creates a new AgentSpec from a deserialized agent specification map.
 
   This function is used by virtual agents to create a spec from persisted
@@ -105,9 +76,8 @@ defmodule BeamMePrompty.Agent.AgentSpec do
   def from_map(
         %{agent: stages, memory: memory_sources, agent_config: agent_config},
         callback_module
-      ) do
-    new(stages, memory_sources, agent_config, callback_module)
-  end
+      ),
+      do: new(stages, memory_sources, agent_config, callback_module)
 
   def from_map(spec_map, _callback_module) do
     {:error,

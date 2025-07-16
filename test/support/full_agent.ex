@@ -16,8 +16,8 @@ defmodule BeamMePrompty.FullAgent do
   end
 
   agent do
-    version("0.1.0")
-    agent_state(:stateless)
+    version "0.1.0"
+    agent_state :stateless
 
     stage :first_stage do
       llm "test-model", BeamMePrompty.FakeLlmClient do
