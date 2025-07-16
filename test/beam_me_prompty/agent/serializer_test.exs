@@ -544,4 +544,3 @@ defmodule BeamMePrompty.Agent.SerializerTest do
     end
   end
 end
-

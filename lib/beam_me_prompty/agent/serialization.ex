@@ -57,9 +57,9 @@ defmodule BeamMePrompty.Agent.Serialization do
   @spec validate(serializable_agent()) :: :ok | {:error, BeamMePrompty.Errors.ValidationError.t()}
   def validate(%{agent: stages, memory: memory_sources, opts: opts})
       when is_list(stages) and is_list(memory_sources) and is_list(opts) do
-    with :ok <- validate_stages(stages),
-         :ok <- validate_memory_sources(memory_sources) do
-      :ok
+    case validate_stages(stages) do
+      :ok -> validate_memory_sources(memory_sources)
+      error -> error
     end
   end
 

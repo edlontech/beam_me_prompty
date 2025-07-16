@@ -59,13 +59,15 @@ defmodule BeamMePrompty.MixProject do
   end
 
   def cli do
-    [preferred_envs: ["test.integration": :test]]
+    [preferred_envs: ["test.integration": :test, "test.reset": :test, "test.setup": :test]]
   end
 
   defp deps do
     [
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:ecto, "~> 3.13"},
+      {:ecto_sql, "~> 3.13"},
       {:ex_check, "~> 0.16", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
       {:ex_doc, "~> 0.38", only: :dev, runtime: false},
@@ -76,6 +78,7 @@ defmodule BeamMePrompty.MixProject do
       {:nimble_options, "~> 1.1"},
       {:open_api_spex, "~> 3.21"},
       {:plug, "~> 1.7"},
+      {:postgrex, ">= 0.0.0"},
       {:req, "~> 0.5"},
       {:recode, "~> 0.6", only: :dev, runtime: false},
       {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false},
@@ -90,7 +93,9 @@ defmodule BeamMePrompty.MixProject do
       test: ["test --exclude integration"],
       "test.integration": [
         "test --only integration"
-      ]
+      ],
+      "test.reset": ["ecto.drop --quiet", "test.setup"],
+      "test.setup": ["ecto.create --quiet", "ecto.migrate --quiet"]
     ]
   end
 

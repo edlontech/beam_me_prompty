@@ -1,5 +1,5 @@
 [
-  import_deps: [:typedstruct],
+  import_deps: [:typedstruct, :ecto, :ecto_sql],
   plugins: [Recode.FormatterPlugin],
   inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}"],
   line_length: 98,
