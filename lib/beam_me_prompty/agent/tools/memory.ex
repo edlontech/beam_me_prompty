@@ -1,4 +1,4 @@
-defmodule BeamMePrompty.Tools.MemoryTools do
+defmodule BeamMePrompty.Agent.Tools.Memory do
   @moduledoc """
   Standard memory tools that can be used by LLMs to interact with agent memory.
 
@@ -7,12 +7,12 @@ defmodule BeamMePrompty.Tools.MemoryTools do
   """
   @moduledoc section: :memory_management
 
-  alias BeamMePrompty.Tools.Memory.Delete
-  alias BeamMePrompty.Tools.Memory.ListKeys
-  alias BeamMePrompty.Tools.Memory.ListSources
-  alias BeamMePrompty.Tools.Memory.Retrieve
-  alias BeamMePrompty.Tools.Memory.Search
-  alias BeamMePrompty.Tools.Memory.Store
+  alias BeamMePrompty.Agent.Tools.Memory.Delete
+  alias BeamMePrompty.Agent.Tools.Memory.ListKeys
+  alias BeamMePrompty.Agent.Tools.Memory.ListSources
+  alias BeamMePrompty.Agent.Tools.Memory.Retrieve
+  alias BeamMePrompty.Agent.Tools.Memory.Search
+  alias BeamMePrompty.Agent.Tools.Memory.Store
 
   @doc """
   Returns all memory tools for use in agent stages.

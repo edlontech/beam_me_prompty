@@ -1,4 +1,4 @@
-defmodule BeamMePrompty.Tools.Memory.ListSources do
+defmodule BeamMePrompty.Agent.Tools.Memory.ListSources do
   @moduledoc """
   Tool for listing available memory sources and their capabilities.
   """

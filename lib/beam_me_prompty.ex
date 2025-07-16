@@ -6,7 +6,7 @@ defmodule BeamMePrompty do
   def start(_type, _args) do
     children = [
       {Registry, [keys: :unique, name: :agents]},
-      BeamMePrompty.AgentManager
+      BeamMePrompty.AgentSupervisor
     ]
 
     opts = [strategy: :one_for_one, name: BeamMePrompty.Supervisor]

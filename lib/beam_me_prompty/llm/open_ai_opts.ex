@@ -151,4 +151,3 @@ defmodule BeamMePrompty.LLM.OpenAIOpts do
     end)
   end
 end
-

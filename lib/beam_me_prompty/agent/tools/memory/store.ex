@@ -1,4 +1,4 @@
-defmodule BeamMePrompty.Tools.Memory.Store do
+defmodule BeamMePrompty.Agent.Tools.Memory.Store do
   @moduledoc """
   Tool for storing information in agent memory.
   """

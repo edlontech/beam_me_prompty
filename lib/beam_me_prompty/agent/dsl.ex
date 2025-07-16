@@ -197,7 +197,7 @@ defmodule BeamMePrompty.Agent.Dsl do
     field :frequency_penalty, float() | nil
     field :presence_penalty, float() | nil
     field :thinking_budget, integer() | nil
-    field :structured_response, OpenApiSpex.Schema.t() | nil
+    field :structured_response, map() | nil
     field :api_key, String.t() | function() | nil
     field :other_params, map() | nil
   end

@@ -13,7 +13,7 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   alias BeamMePrompty.DAG
   alias BeamMePrompty.Errors
 
-  @type agent_module :: module()
+  @type agent_spec :: BeamMePrompty.Agent.AgentSpec.t()
   @type agent_state :: any()
   @type callback_status :: :ok | {:ok, any()} | any()
   @type ready_nodes :: [atom()]
@@ -63,7 +63,7 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   Executes the agent's handle_init callback.
 
   ## Parameters
-  - `agent_module`: The agent module to call
+  - `agent_spec`: The agent spec containing the callback module
   - `dag`: The DAG structure
   - `initial_state`: The initial agent state
 
@@ -71,10 +71,10 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   `{status, final_state}` tuple where status indicates success/failure
   and final_state is the resolved agent state.
   """
-  @spec execute_init_callback(agent_module(), DAG.dag(), agent_state()) ::
+  @spec execute_init_callback(agent_spec(), DAG.dag(), agent_state()) ::
           {callback_status(), agent_state()}
-  def execute_init_callback(agent_module, dag, initial_state) do
-    {status, new_state} = agent_module.handle_init(dag, initial_state)
+  def execute_init_callback(agent_spec, dag, initial_state) do
+    {status, new_state} = agent_spec.callback_module.handle_init(dag, initial_state)
     final_state = handle_callback_response({status, new_state}, initial_state)
 
     {status, final_state}
@@ -91,10 +91,12 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   ## Returns
   `{status, planned_nodes, final_state}` tuple
   """
-  @spec execute_plan_callback(agent_module(), ready_nodes(), agent_state()) ::
+  @spec execute_plan_callback(agent_spec(), ready_nodes(), agent_state()) ::
           {callback_status(), planned_nodes(), agent_state()}
-  def execute_plan_callback(agent_module, ready_nodes, current_state) do
-    {status, planned_nodes, new_state} = agent_module.handle_plan(ready_nodes, current_state)
+  def execute_plan_callback(agent_spec, ready_nodes, current_state) do
+    {status, planned_nodes, new_state} =
+      agent_spec.callback_module.handle_plan(ready_nodes, current_state)
+
     final_state = handle_callback_response({status, new_state}, current_state)
 
     {status, planned_nodes, final_state}
@@ -111,10 +113,12 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   ## Returns
   `{status, final_state}` tuple
   """
-  @spec execute_batch_start_callback(agent_module(), node_definitions(), agent_state()) ::
+  @spec execute_batch_start_callback(agent_spec(), node_definitions(), agent_state()) ::
           {callback_status(), agent_state()}
-  def execute_batch_start_callback(agent_module, nodes_to_execute, current_state) do
-    {status, new_state} = agent_module.handle_batch_start(nodes_to_execute, current_state)
+  def execute_batch_start_callback(agent_spec, nodes_to_execute, current_state) do
+    {status, new_state} =
+      agent_spec.callback_module.handle_batch_start(nodes_to_execute, current_state)
+
     final_state = handle_callback_response({status, new_state}, current_state)
 
     {status, final_state}
@@ -133,15 +137,19 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   `{status, final_state}` tuple
   """
   @spec execute_stage_finish_callback(
-          agent_module(),
+          agent_spec(),
           stage_definition(),
           stage_result(),
           agent_state()
         ) ::
           {callback_status(), agent_state()}
-  def execute_stage_finish_callback(agent_module, stage_definition, stage_result, current_state) do
+  def execute_stage_finish_callback(agent_spec, stage_definition, stage_result, current_state) do
     {status, new_state} =
-      agent_module.handle_stage_finish(stage_definition, stage_result, current_state)
+      agent_spec.callback_module.handle_stage_finish(
+        stage_definition,
+        stage_result,
+        current_state
+      )
 
     final_state = handle_callback_response({status, new_state}, current_state)
 
@@ -159,10 +167,10 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   ## Returns
   `{status, final_state}` tuple
   """
-  @spec execute_progress_callback(agent_module(), progress_info(), agent_state()) ::
+  @spec execute_progress_callback(agent_spec(), progress_info(), agent_state()) ::
           {callback_status(), agent_state()}
-  def execute_progress_callback(agent_module, progress_info, current_state) do
-    {status, new_state} = agent_module.handle_progress(progress_info, current_state)
+  def execute_progress_callback(agent_spec, progress_info, current_state) do
+    {status, new_state} = agent_spec.callback_module.handle_progress(progress_info, current_state)
     final_state = handle_callback_response({status, new_state}, current_state)
 
     {status, final_state}
@@ -181,15 +189,19 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   `{status, final_state}` tuple
   """
   @spec execute_batch_complete_callback(
-          agent_module(),
+          agent_spec(),
           batch_results(),
           pending_nodes(),
           agent_state()
         ) ::
           {callback_status(), agent_state()}
-  def execute_batch_complete_callback(agent_module, batch_results, pending_nodes, current_state) do
+  def execute_batch_complete_callback(agent_spec, batch_results, pending_nodes, current_state) do
     {status, new_state} =
-      agent_module.handle_batch_complete(batch_results, pending_nodes, current_state)
+      agent_spec.callback_module.handle_batch_complete(
+        batch_results,
+        pending_nodes,
+        current_state
+      )
 
     final_state = handle_callback_response({status, new_state}, current_state)
 
@@ -207,10 +219,10 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   ## Returns
   `{status, final_state}` tuple
   """
-  @spec execute_complete_callback(agent_module(), map(), agent_state()) ::
+  @spec execute_complete_callback(agent_spec(), map(), agent_state()) ::
           {callback_status(), agent_state()}
-  def execute_complete_callback(agent_module, final_results, current_state) do
-    {status, new_state} = agent_module.handle_complete(final_results, current_state)
+  def execute_complete_callback(agent_spec, final_results, current_state) do
+    {status, new_state} = agent_spec.callback_module.handle_complete(final_results, current_state)
     final_state = handle_callback_response({status, new_state}, current_state)
 
     {status, final_state}
@@ -227,9 +239,9 @@ defmodule BeamMePrompty.Agent.Internals.StateManager do
   ## Returns
   The agent's error handling response (varies by implementation)
   """
-  @spec execute_error_callback(agent_module(), error_class(), agent_state()) :: any()
-  def execute_error_callback(agent_module, error_class, current_state) do
-    agent_module.handle_error(error_class, current_state)
+  @spec execute_error_callback(agent_spec(), error_class(), agent_state()) :: any()
+  def execute_error_callback(agent_spec, error_class, current_state) do
+    agent_spec.callback_module.handle_error(error_class, current_state)
   end
 
   @doc """

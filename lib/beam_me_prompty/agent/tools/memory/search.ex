@@ -1,4 +1,4 @@
-defmodule BeamMePrompty.Tools.Memory.Search do
+defmodule BeamMePrompty.Agent.Tools.Memory.Search do
   @moduledoc """
   Tool for searching through agent memory.
   """

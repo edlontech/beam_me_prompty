@@ -434,4 +434,3 @@ defmodule BeamMePrompty.LLM.OpenAI do
     "call_" <> (:crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower))
   end
 end
-
