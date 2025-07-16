@@ -79,4 +79,6 @@ jobs:
             priv/plts
 
       - name: Run Checks
-        run: mix check
+        run: |
+          mix test.setup
+          mix check
