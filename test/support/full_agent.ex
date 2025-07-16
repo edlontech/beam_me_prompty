@@ -1,6 +1,19 @@
-defmodule BeamMePrompty.TestAgent do
+defmodule BeamMePrompty.FullAgent do
   @moduledoc false
   use BeamMePrompty.Agent
+
+  def get_test_api_key do
+    System.get_env("TEST_API_KEY")
+  end
+
+  memory do
+    memory_source :short_term, BeamMePrompty.Agent.Memory.ETS,
+      description: "Short-Term memory storage",
+      opts: [
+        table: :my_agent_memory
+      ],
+      default: true
+  end
 
   agent do
     version("0.1.0")
@@ -13,7 +26,7 @@ defmodule BeamMePrompty.TestAgent do
           top_p 0.9
           frequency_penalty 0.1
           presence_penalty 0.2
-          api_key fn -> System.get_env("TEST_API_KEY") end
+          api_key &__MODULE__.get_test_api_key/0
         end
 
         message :system, [text_part("You are a helpful assistant.")]

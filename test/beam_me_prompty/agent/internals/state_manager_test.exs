@@ -3,6 +3,7 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
 
   import ExUnit.CaptureLog
 
+  alias BeamMePrompty.Agent.AgentSpec
   alias BeamMePrompty.Agent.Internals.StateManager
 
   defmodule MockAgent do
@@ -52,6 +53,15 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
     def handle_error(_error, _state), do: raise("Test exception")
   end
 
+  defp create_agent_spec(callback_module) do
+    %AgentSpec{
+      stages: [],
+      memory_sources: [],
+      agent_config: %{},
+      callback_module: callback_module
+    }
+  end
+
   describe "handle_callback_response/2" do
     test "returns new state when status is :ok" do
       result = StateManager.handle_callback_response({:ok, "new_state"}, "current_state")
@@ -84,7 +94,8 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
       dag = %{}
       initial_state = "initial"
 
-      {status, final_state} = StateManager.execute_init_callback(MockAgent, dag, initial_state)
+      {status, final_state} =
+        StateManager.execute_init_callback(create_agent_spec(MockAgent), dag, initial_state)
 
       assert status == :ok
       assert final_state == initial_state
@@ -95,7 +106,11 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
       initial_state = "initial"
 
       {status, final_state} =
-        StateManager.execute_init_callback(MockAgentWithOverride, dag, initial_state)
+        StateManager.execute_init_callback(
+          create_agent_spec(MockAgentWithOverride),
+          dag,
+          initial_state
+        )
 
       assert status == {:ok, :override_state}
       assert final_state == :override_state
@@ -106,7 +121,11 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
       initial_state = "initial"
 
       {status, final_state} =
-        StateManager.execute_init_callback(MockAgentWithError, dag, initial_state)
+        StateManager.execute_init_callback(
+          create_agent_spec(MockAgentWithError),
+          dag,
+          initial_state
+        )
 
       assert status == :error
       assert final_state == initial_state
@@ -119,7 +138,11 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
       current_state = "current"
 
       {status, planned_nodes, final_state} =
-        StateManager.execute_plan_callback(MockAgent, ready_nodes, current_state)
+        StateManager.execute_plan_callback(
+          create_agent_spec(MockAgent),
+          ready_nodes,
+          current_state
+        )
 
       assert status == :ok
       assert planned_nodes == ready_nodes
@@ -131,7 +154,11 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
       current_state = "current"
 
       {status, planned_nodes, final_state} =
-        StateManager.execute_plan_callback(MockAgentWithOverride, ready_nodes, current_state)
+        StateManager.execute_plan_callback(
+          create_agent_spec(MockAgentWithOverride),
+          ready_nodes,
+          current_state
+        )
 
       assert status == {:ok, :override_state}
       assert planned_nodes == ready_nodes
@@ -143,7 +170,11 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
       current_state = "current"
 
       {status, planned_nodes, final_state} =
-        StateManager.execute_plan_callback(MockAgentWithError, ready_nodes, current_state)
+        StateManager.execute_plan_callback(
+          create_agent_spec(MockAgentWithError),
+          ready_nodes,
+          current_state
+        )
 
       assert status == :error
       assert planned_nodes == []
@@ -157,7 +188,11 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
       current_state = "current"
 
       {status, final_state} =
-        StateManager.execute_batch_start_callback(MockAgent, nodes_to_execute, current_state)
+        StateManager.execute_batch_start_callback(
+          create_agent_spec(MockAgent),
+          nodes_to_execute,
+          current_state
+        )
 
       assert status == :ok
       assert final_state == current_state
@@ -169,7 +204,7 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
 
       {status, final_state} =
         StateManager.execute_batch_start_callback(
-          MockAgentWithOverride,
+          create_agent_spec(MockAgentWithOverride),
           nodes_to_execute,
           current_state
         )
@@ -184,7 +219,7 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
 
       {status, final_state} =
         StateManager.execute_batch_start_callback(
-          MockAgentWithError,
+          create_agent_spec(MockAgentWithError),
           nodes_to_execute,
           current_state
         )
@@ -202,7 +237,7 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
 
       {status, final_state} =
         StateManager.execute_stage_finish_callback(
-          MockAgent,
+          create_agent_spec(MockAgent),
           stage_definition,
           stage_result,
           current_state
@@ -219,7 +254,7 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
 
       {status, final_state} =
         StateManager.execute_stage_finish_callback(
-          MockAgentWithOverride,
+          create_agent_spec(MockAgentWithOverride),
           stage_definition,
           stage_result,
           current_state
@@ -236,7 +271,7 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
 
       {status, final_state} =
         StateManager.execute_stage_finish_callback(
-          MockAgentWithError,
+          create_agent_spec(MockAgentWithError),
           stage_definition,
           stage_result,
           current_state
@@ -253,7 +288,11 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
       current_state = "current"
 
       {status, final_state} =
-        StateManager.execute_progress_callback(MockAgent, progress_info, current_state)
+        StateManager.execute_progress_callback(
+          create_agent_spec(MockAgent),
+          progress_info,
+          current_state
+        )
 
       assert status == :ok
       assert final_state == current_state
@@ -265,7 +304,7 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
 
       {status, final_state} =
         StateManager.execute_progress_callback(
-          MockAgentWithOverride,
+          create_agent_spec(MockAgentWithOverride),
           progress_info,
           current_state
         )
@@ -279,7 +318,11 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
       current_state = "current"
 
       {status, final_state} =
-        StateManager.execute_progress_callback(MockAgentWithError, progress_info, current_state)
+        StateManager.execute_progress_callback(
+          create_agent_spec(MockAgentWithError),
+          progress_info,
+          current_state
+        )
 
       assert status == :error
       assert final_state == current_state
@@ -294,7 +337,7 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
 
       {status, final_state} =
         StateManager.execute_batch_complete_callback(
-          MockAgent,
+          create_agent_spec(MockAgent),
           batch_results,
           pending_nodes,
           current_state
@@ -311,7 +354,7 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
 
       {status, final_state} =
         StateManager.execute_batch_complete_callback(
-          MockAgentWithOverride,
+          create_agent_spec(MockAgentWithOverride),
           batch_results,
           pending_nodes,
           current_state
@@ -328,7 +371,7 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
 
       {status, final_state} =
         StateManager.execute_batch_complete_callback(
-          MockAgentWithError,
+          create_agent_spec(MockAgentWithError),
           batch_results,
           pending_nodes,
           current_state
@@ -345,7 +388,11 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
       current_state = "current"
 
       {status, final_state} =
-        StateManager.execute_complete_callback(MockAgent, final_results, current_state)
+        StateManager.execute_complete_callback(
+          create_agent_spec(MockAgent),
+          final_results,
+          current_state
+        )
 
       assert status == :ok
       assert final_state == current_state
@@ -357,7 +404,7 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
 
       {status, final_state} =
         StateManager.execute_complete_callback(
-          MockAgentWithOverride,
+          create_agent_spec(MockAgentWithOverride),
           final_results,
           current_state
         )
@@ -371,7 +418,11 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
       current_state = "current"
 
       {status, final_state} =
-        StateManager.execute_complete_callback(MockAgentWithError, final_results, current_state)
+        StateManager.execute_complete_callback(
+          create_agent_spec(MockAgentWithError),
+          final_results,
+          current_state
+        )
 
       assert status == :error
       assert final_state == current_state
@@ -383,7 +434,12 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
       error_class = :timeout_error
       current_state = "current"
 
-      result = StateManager.execute_error_callback(MockAgent, error_class, current_state)
+      result =
+        StateManager.execute_error_callback(
+          create_agent_spec(MockAgent),
+          error_class,
+          current_state
+        )
 
       assert result == {:error, current_state}
     end
@@ -393,7 +449,11 @@ defmodule BeamMePrompty.Agent.Internals.StateManagerTest do
       current_state = "current"
 
       assert_raise RuntimeError, "Test exception", fn ->
-        StateManager.execute_error_callback(MockAgentWithException, error_class, current_state)
+        StateManager.execute_error_callback(
+          create_agent_spec(MockAgentWithException),
+          error_class,
+          current_state
+        )
       end
     end
   end

@@ -496,7 +496,23 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
   end
 
   defp deserialize_agent_config(agent_config) when is_map(agent_config) do
-    {:ok, agent_config}
+    # Convert string keys to atoms for agent_config
+    atomized_config =
+      agent_config
+      |> Enum.map(fn
+        {"agent_state", value} -> {:agent_state, String.to_existing_atom(value)}
+        {"version", value} -> {:version, value}
+        {key, value} -> {String.to_existing_atom(key), value}
+      end)
+      |> Map.new()
+
+    {:ok, atomized_config}
+  rescue
+    ArgumentError ->
+      {:error,
+       DeserializationError.exception(
+         cause: %{message: "Invalid atom in agent_config", input: agent_config}
+       )}
   end
 
   defp deserialize_agent_config(input) do

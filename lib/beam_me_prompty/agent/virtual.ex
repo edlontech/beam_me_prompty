@@ -3,8 +3,7 @@ defmodule BeamMePrompty.Agent.Virtual do
   Virtual agent implementation that executes persisted agent configurations.
 
   Virtual agents take a pre-loaded agent configuration and provide the same
-  interface as regular agents without requiring compilation. The consumer is
-  responsible for querying and filtering persisted agents as needed.
+  interface as regular agents without requiring compilation. 
 
   ## Usage
 
@@ -36,16 +35,12 @@ defmodule BeamMePrompty.Agent.Virtual do
   2. Deserializing the configuration into agent DSL structures
   3. Providing the same interface as regular agents (`stages/0`, `memory_sources/0`, `agent_config/0`)
   4. Using the standard executor infrastructure without modification
-
-  This approach separates concerns:
-  - **Consumer**: Handles querying, filtering, and selecting agents
-  - **Virtual agent**: Handles execution of the selected configuration
   """
   @moduledoc section: :agent_core_and_lifecycle
 
   use BeamMePrompty.Agent.Executor
-  use GenServer
 
+  alias BeamMePrompty.Agent.AgentSpec
   alias BeamMePrompty.Agent.Executor
   alias BeamMePrompty.Agent.Serialization
   alias BeamMePrompty.Errors.ValidationError
@@ -99,11 +94,10 @@ defmodule BeamMePrompty.Agent.Virtual do
           timeout :: integer()
         ) :: {:ok, any()} | {:error, any()}
   def run_sync(agent_spec, input \\ %{}, initial_state \\ %{}, opts \\ [], timeout \\ 30_000) do
-    with {:ok, agent_config} <- deserialize_agent_spec(agent_spec),
-         :ok <- Serialization.validate(agent_config) do
-      Process.put(:virtual_agent_config, agent_config)
-
-      Executor.execute(__MODULE__, input, initial_state, opts, timeout)
+    with {:ok, deserialized_spec} <- deserialize_agent_spec(agent_spec),
+         :ok <- Serialization.validate(deserialized_spec),
+         {:ok, canonical_spec} <- AgentSpec.from_map(deserialized_spec, __MODULE__) do
+      Executor.execute(canonical_spec, input, initial_state, opts, timeout)
     end
   end
 
@@ -132,19 +126,11 @@ defmodule BeamMePrompty.Agent.Virtual do
     input = Keyword.get(start_opts, :input, %{})
     initial_state = Keyword.get(start_opts, :initial_state, %{})
     opts = Keyword.get(start_opts, :opts, [])
-    session_id = Keyword.get(start_opts, :session_id, make_ref())
 
-    with {:ok, agent_config} <- deserialize_agent_spec(agent_spec),
-         :ok <- Serialization.validate(agent_config) do
-      case GenServer.start_link(__MODULE__, agent_config,
-             name: {:via, Registry, {:agents, virtual_agent_name(session_id)}}
-           ) do
-        {:ok, _pid} ->
-          Executor.start_link(__MODULE__, input, initial_state, opts)
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+    with {:ok, deserialized_spec} <- deserialize_agent_spec(agent_spec),
+         :ok <- Serialization.validate(deserialized_spec),
+         {:ok, canonical_spec} <- AgentSpec.from_map(deserialized_spec, __MODULE__) do
+      Executor.start_link(canonical_spec, input, initial_state, opts)
     end
   end
 
@@ -181,80 +167,8 @@ defmodule BeamMePrompty.Agent.Virtual do
     }
   end
 
-  # Standard agent interface - these functions are called by the executor
-
-  @doc """
-  Returns the stages configuration for the virtual agent.
-
-  This is called by the executor to get the agent's stages.
-  """
-  def stages do
-    case get_agent_config() do
-      {:ok, config} -> config.agent
-      {:error, _} -> []
-    end
-  end
-
-  @doc """
-  Returns the memory sources configuration for the virtual agent.
-
-  This is called by the executor to get the agent's memory sources.
-  """
-  def memory_sources do
-    case get_agent_config() do
-      {:ok, config} -> config.memory
-      {:error, _} -> []
-    end
-  end
-
-  @doc """
-  Returns the agent configuration options for the virtual agent.
-
-  This is called by the executor to get the agent's configuration.
-  """
-  def agent_config do
-    case get_agent_config() do
-      {:ok, config} -> config.opts
-      {:error, _} -> []
-    end
-  end
-
-  @impl GenServer
-  def init(agent_config) do
-    {:ok, %{agent_config: agent_config}}
-  end
-
-  @impl GenServer
-  def handle_call(:get_config, _from, %{agent_config: config} = state) do
-    {:reply, {:ok, config}, state}
-  end
-
-  @impl GenServer
-  def handle_call(:get_stages, _from, %{agent_config: config} = state) do
-    {:reply, config.agent, state}
-  end
-
-  @impl GenServer
-  def handle_call(:get_memory_sources, _from, %{agent_config: config} = state) do
-    {:reply, config.memory, state}
-  end
-
-  @impl GenServer
-  def handle_call(:get_agent_config, _from, %{agent_config: config} = state) do
-    {:reply, config.opts, state}
-  end
-
-  # Private functions
-
   defp deserialize_agent_spec(agent_spec) when is_map(agent_spec) do
-    case Jason.encode(agent_spec) do
-      {:ok, json_string} ->
-        Serialization.deserialize(json_string)
-
-      {:error, reason} ->
-        {:error,
-         ValidationError.exception(message: "Failed to encode agent spec: #{inspect(reason)}")}
-    end
+    {:ok, agent_spec}
   end
 
   defp deserialize_agent_spec(agent_spec) when is_binary(agent_spec) do
@@ -263,21 +177,6 @@ defmodule BeamMePrompty.Agent.Virtual do
 
   defp deserialize_agent_spec(agent_spec) do
     {:error,
-     ValidationError.exception(message: "Invalid agent spec format: #{inspect(agent_spec)}")}
+     ValidationError.exception(cause: "Invalid agent spec format: #{inspect(agent_spec)}")}
   end
-
-  defp get_agent_config do
-    case Process.get(:virtual_agent_config) do
-      nil ->
-        # Try to get config from GenServer (for start_link)
-        # For now, we'll use a simple approach and store it in process dictionary
-        # In a real implementation, we'd need better session management
-        {:error, :no_config}
-
-      config ->
-        {:ok, config}
-    end
-  end
-
-  defp virtual_agent_name(session_id), do: "virtual_agent_#{inspect(session_id)}"
 end

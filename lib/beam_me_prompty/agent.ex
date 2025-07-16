@@ -189,6 +189,7 @@ defmodule BeamMePrompty.Agent do
     quote do
       use BeamMePrompty.Agent.Executor
 
+      alias BeamMePrompty.Agent.AgentSpec
       alias BeamMePrompty.Agent.Dsl
       alias BeamMePrompty.Agent.Executor
 
@@ -209,8 +210,10 @@ defmodule BeamMePrompty.Agent do
         initial_state = Keyword.get(start_opts, :initial_state, %{})
         opts = Keyword.get(start_opts, :opts, [])
 
+        {:ok, agent_spec} = to_spec()
+
         Executor.start_link(
-          __MODULE__,
+          agent_spec,
           input,
           initial_state,
           opts
@@ -233,12 +236,11 @@ defmodule BeamMePrompty.Agent do
               timeout :: integer()
             ) ::
               {:ok, any()} | {:error, any()}
-      def run_sync(input \\ %{}, initial_state \\ %{}, opts \\ [], timeout \\ 15_000),
-        do: Executor.execute(__MODULE__, input, initial_state, opts, timeout)
+      def run_sync(input \\ %{}, initial_state \\ %{}, opts \\ [], timeout \\ 15_000) do
+        {:ok, agent_spec} = to_spec()
+        Executor.execute(agent_spec, input, initial_state, opts, timeout)
+      end
 
-      @doc """
-      Retrieves the Agent DSL information.
-      """
       def stages do
         __MODULE__
         |> Dsl.Info.agent()
@@ -249,10 +251,14 @@ defmodule BeamMePrompty.Agent do
         |> Dsl.Info.memory()
       end
 
-      @doc """
-      Retrieves the agent configuration options.
-      """
-      def agent_config, do: BeamMePrompty.Agent.Dsl.Info.agent_options(__MODULE__)
+      def agent_config do
+        __MODULE__
+        |> Dsl.Info.agent_options()
+      end
+
+      def to_spec do
+        AgentSpec.new(stages(), memory_sources(), agent_config(), __MODULE__)
+      end
     end
   end
 end

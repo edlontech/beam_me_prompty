@@ -32,7 +32,7 @@ defmodule BeamMePrompty.Agent.Internals do
     :agent_type,
     :session_id,
     :agent_version,
-    :agent_module,
+    :agent_spec,
 
     # DAG and execution context
     :dag,
@@ -65,22 +65,28 @@ defmodule BeamMePrompty.Agent.Internals do
   alias BeamMePrompty.DAG
 
   @impl true
-  def init({session_id, dag, input, initial_agent_state, opts, agent_module}) do
-    Telemetry.agent_execution_start(agent_module, session_id, input, initial_agent_state, opts)
+  def init({session_id, dag, input, initial_agent_state, opts, agent_spec}) do
+    Telemetry.agent_execution_start(
+      agent_spec.callback_module,
+      session_id,
+      input,
+      initial_agent_state,
+      opts
+    )
 
     Logger.debug(
-      "[BeamMePrompty] Agent [#{inspect(agent_module)}](sid: #{inspect(session_id)}) initializing..."
+      "[BeamMePrompty] Agent [#{inspect(agent_spec)}](sid: #{inspect(session_id)}) initializing..."
     )
 
     {_init_status, current_agent_state} =
-      StateManager.execute_init_callback(agent_module, dag, initial_agent_state)
+      StateManager.execute_init_callback(agent_spec, dag, initial_agent_state)
 
     with {:ok, stages_sup_pid} <- StagesSupervisor.start_link(:ok),
-         {:ok, memory_manager_pid} <- start_memory_manager(agent_module.memory_sources()) do
+         {:ok, memory_manager_pid} <- start_memory_manager(agent_spec.memory_sources) do
       stage_workers =
-        start_stage_workers(stages_sup_pid, session_id, agent_module, dag.nodes)
+        start_stage_workers(stages_sup_pid, session_id, agent_spec, dag.nodes)
 
-      agent_config = agent_module.agent_config()
+      agent_config = agent_spec.agent_config
 
       data = %__MODULE__{
         agent_type: agent_config.agent_state,
@@ -88,7 +94,7 @@ defmodule BeamMePrompty.Agent.Internals do
         session_id: session_id,
         dag: dag,
         opts: opts,
-        agent_module: agent_module,
+        agent_spec: agent_spec,
         global_input: input,
         initial_state: initial_agent_state,
         current_state: current_agent_state,
@@ -111,24 +117,24 @@ defmodule BeamMePrompty.Agent.Internals do
   def waiting_for_plan(:internal, :plan, data) do
     completed_count = ResultManager.completed_count(data.result_manager)
     total_count = map_size(data.dag.nodes)
-    Telemetry.dag_planning_start(data.agent_module, data.session_id, completed_count, total_count)
+    Telemetry.dag_planning_start(data.agent_spec, data.session_id, completed_count, total_count)
 
     current_results = ResultManager.get_all_results(data.result_manager)
     ready_nodes_from_dag = DAG.find_ready_nodes(data.dag, current_results)
 
     Logger.debug(
-      "[BeamMePrompty] Agent [#{inspect(data.agent_module)}](sid: #{inspect(data.session_id)}) #{inspect(ready_nodes_from_dag)}, Completed: #{completed_count}/#{total_count}"
+      "[BeamMePrompty] Agent [#{inspect(data.agent_spec)}](sid: #{inspect(data.session_id)}) #{inspect(ready_nodes_from_dag)}, Completed: #{completed_count}/#{total_count}"
     )
 
     {plan_status, planned_nodes, updated_agent_state} =
       StateManager.execute_plan_callback(
-        data.agent_module,
+        data.agent_spec,
         ready_nodes_from_dag,
         data.current_state
       )
 
     Logger.debug(
-      "[BeamMePrompty] Agent [#{inspect(data.agent_module)}](sid: #{inspect(data.session_id)}) Plan callback result - Status: #{inspect(plan_status)}, Planned nodes: #{inspect(planned_nodes)}"
+      "[BeamMePrompty] Agent [#{inspect(data.agent_spec)}](sid: #{inspect(data.session_id)}) Plan callback result - Status: #{inspect(plan_status)}, Planned nodes: #{inspect(planned_nodes)}"
     )
 
     effective_ready_nodes =
@@ -138,7 +144,7 @@ defmodule BeamMePrompty.Agent.Internals do
       end
 
     Telemetry.dag_planning_stop(
-      data.agent_module,
+      data.agent_spec,
       data.session_id,
       Enum.count(ready_nodes_from_dag),
       Enum.count(planned_nodes),
@@ -166,17 +172,17 @@ defmodule BeamMePrompty.Agent.Internals do
 
   # Helper functions for waiting_for_plan state
 
-  defp start_stage_workers(supervisor_pid, session_id, agent_module, dag_nodes) do
+  defp start_stage_workers(supervisor_pid, session_id, agent_spec, dag_nodes) do
     Enum.into(dag_nodes, %{}, fn {node_name, _node_definition} ->
       case StagesSupervisor.start_stage_worker(
              supervisor_pid,
              session_id,
-             agent_module,
+             agent_spec.callback_module,
              node_name
            ) do
         {:ok, stage_pid} ->
           Logger.debug(
-            "[BeamMePrompty] Agent [#{inspect(agent_module)}](sid: #{inspect(session_id)}): Started stage worker for #{node_name} (PID: #{inspect(stage_pid)})"
+            "[BeamMePrompty] Agent [#{inspect(agent_spec)}](sid: #{inspect(session_id)}): Started stage worker for #{node_name} (PID: #{inspect(stage_pid)})"
           )
 
           {node_name, stage_pid}
@@ -198,7 +204,7 @@ defmodule BeamMePrompty.Agent.Internals do
 
     {_status, final_agent_state} =
       StateManager.execute_complete_callback(
-        data.agent_module,
+        data.agent_spec,
         current_results,
         data.current_state
       )
@@ -223,7 +229,7 @@ defmodule BeamMePrompty.Agent.Internals do
           Map.merge(data.initial_state, %{
             dependency_results: current_results,
             global_input: data.global_input,
-            agent_module: data.agent_module,
+            agent_spec: data.agent_spec,
             current_agent_state: data.current_state,
             memory_manager: data.memory_manager
           })
@@ -257,7 +263,7 @@ defmodule BeamMePrompty.Agent.Internals do
       {:ok, {stage_node_definition, _node_ctx}} ->
         {_status, agent_state_after_stage_finish} =
           StateManager.execute_stage_finish_callback(
-            updated_data.agent_module,
+            updated_data.agent_spec,
             stage_node_definition,
             stage_result,
             updated_data.current_state
@@ -300,7 +306,7 @@ defmodule BeamMePrompty.Agent.Internals do
     progress_info = ProgressTracker.get_progress_info(updated_progress_tracker)
 
     {_status, agent_state_after_progress} =
-      StateManager.execute_progress_callback(data.agent_module, progress_info, data.current_state)
+      StateManager.execute_progress_callback(data.agent_spec, progress_info, data.current_state)
 
     data_after_progress = %{
       data
@@ -324,7 +330,7 @@ defmodule BeamMePrompty.Agent.Internals do
 
     {_status, agent_state_after_batch_complete} =
       StateManager.execute_batch_complete_callback(
-        data.agent_module,
+        data.agent_spec,
         batch_results,
         pending_dag_nodes_list,
         data.current_state
@@ -350,7 +356,7 @@ defmodule BeamMePrompty.Agent.Internals do
     else
       {_batch_start_status, updated_agent_state} =
         StateManager.execute_batch_start_callback(
-          data.agent_module,
+          data.agent_spec,
           data.nodes_to_execute,
           data.current_state
         )
@@ -417,7 +423,7 @@ defmodule BeamMePrompty.Agent.Internals do
     entry_point_stage = find_entry_point_stage(data.dag.nodes)
 
     Logger.debug(
-      "[BeamMePrompty] Agent [#{inspect(data.agent_module)}] (sid: #{inspect(data.session_id)}) received message: #{inspect(message)}"
+      "[BeamMePrompty] Agent [#{inspect(data.agent_spec)}] (sid: #{inspect(data.session_id)}) received message: #{inspect(message)}"
     )
 
     if entry_point_stage do
@@ -473,7 +479,7 @@ defmodule BeamMePrompty.Agent.Internals do
   @impl true
   def terminate(reason, _state_name, data) do
     Telemetry.agent_execution_stop(
-      data.agent_module,
+      data.agent_spec.callback_module,
       data.session_id,
       reason,
       data.result_manager

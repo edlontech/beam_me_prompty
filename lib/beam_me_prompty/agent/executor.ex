@@ -221,12 +221,12 @@ defmodule BeamMePrompty.Agent.Executor do
       # Execute an agent synchronously
       {:ok, results} = BeamMePrompty.Agents.Executor.execute(MyAgent, %{input: "data"})
   """
-  def execute(module, input, state, opts, timeout) do
+  def execute(agent_spec, input, state, opts, timeout) do
     # Store original trap_exit setting to restore it later
     previous_trap_exit = Process.flag(:trap_exit, true)
 
     try do
-      case start_link(module, input, state, opts) do
+      case start_link(agent_spec, input, state, opts) do
         {:ok, pid} ->
           # Monitor is still useful for normal termination and error handling
           ref = Process.monitor(pid)
@@ -252,13 +252,13 @@ defmodule BeamMePrompty.Agent.Executor do
     end
   end
 
-  def start_link(module, input, state, opts) do
-    dag = DAG.build(module.stages())
+  def start_link(agent_spec, input, state, opts) do
+    dag = DAG.build(agent_spec.stages)
     session_id = Keyword.get(opts, :session_id, make_ref())
 
     with :ok <- DAG.validate(dag),
          {:ok, validated_opts} <- ExecutorOptions.validate(opts) do
-      init = {session_id, dag, input, state, opts, module}
+      init = {session_id, dag, input, state, opts, agent_spec}
 
       genserver_opts = [name: executor_id(session_id)]
 

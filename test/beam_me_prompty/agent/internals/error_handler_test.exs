@@ -4,6 +4,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
 
   import ExUnit.CaptureLog
 
+  alias BeamMePrompty.Agent.AgentSpec
   alias BeamMePrompty.Agent.Internals.BatchManager
   alias BeamMePrompty.Agent.Internals.ErrorHandler
   alias BeamMePrompty.Agent.Internals.ResultManager
@@ -14,8 +15,15 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
 
   describe "handle_execution_error/2" do
     setup do
+      agent_spec = %AgentSpec{
+        stages: [],
+        memory_sources: [],
+        agent_config: %{},
+        callback_module: MockAgent
+      }
+
       data = %{
-        agent_module: MockAgent,
+        agent_spec: agent_spec,
         session_id: "test_session_123",
         current_state: %{some: "state"},
         result_manager: ResultManager.new(),
@@ -40,7 +48,8 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
       end)
 
       expect(StateManager, :execute_error_callback, fn
-        MockAgent, error_class, current_state ->
+        agent_spec, error_class, current_state ->
+          assert agent_spec.callback_module == MockAgent
           assert is_struct(error_class, Errors.Framework)
           assert current_state == data.current_state
           {:retry, new_agent_state}
@@ -74,7 +83,8 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
       end)
 
       expect(StateManager, :execute_error_callback, fn
-        MockAgent, _error_class, _current_state ->
+        agent_spec, _error_class, _current_state ->
+          assert agent_spec.callback_module == MockAgent
           {:stop, stop_reason}
       end)
 
@@ -99,7 +109,8 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
       end)
 
       expect(StateManager, :execute_error_callback, fn
-        MockAgent, _error_class, _current_state ->
+        agent_spec, _error_class, _current_state ->
+          assert agent_spec.callback_module == MockAgent
           {:restart, restart_reason}
       end)
 
@@ -124,7 +135,8 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
       end)
 
       expect(StateManager, :execute_error_callback, fn
-        MockAgent, _error_class, _current_state ->
+        agent_spec, _error_class, _current_state ->
+          assert agent_spec.callback_module == MockAgent
           unexpected_response
       end)
 
@@ -159,8 +171,15 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
     test "creates ExecutionError and delegates to handle_execution_error" do
       error_reason = "stage timeout"
 
+      agent_spec = %AgentSpec{
+        stages: [],
+        memory_sources: [],
+        agent_config: %{},
+        callback_module: MockAgent
+      }
+
       data = %{
-        agent_module: MockAgent,
+        agent_spec: agent_spec,
         session_id: "test_session",
         current_state: %{},
         result_manager: ResultManager.new(),
@@ -174,7 +193,8 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
       end)
 
       expect(StateManager, :execute_error_callback, fn
-        MockAgent, error_class, _current_state ->
+        agent_spec, error_class, _current_state ->
+          assert agent_spec.callback_module == MockAgent
           assert is_struct(error_class, Errors.Framework)
           {:stop, "stage failed"}
       end)
@@ -193,8 +213,15 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
 
   describe "handle_planning_error/1" do
     test "creates planning ExecutionError and delegates to handle_execution_error" do
+      agent_spec = %AgentSpec{
+        stages: [],
+        memory_sources: [],
+        agent_config: %{},
+        callback_module: MockAgent
+      }
+
       data = %{
-        agent_module: MockAgent,
+        agent_spec: agent_spec,
         session_id: "planning_session",
         current_state: %{planning: true},
         result_manager: ResultManager.new(),
@@ -208,7 +235,8 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
       end)
 
       expect(StateManager, :execute_error_callback, fn
-        MockAgent, error_class, _current_state ->
+        agent_spec, error_class, _current_state ->
+          assert agent_spec.callback_module == MockAgent
           assert is_struct(error_class, Errors.Framework)
           [error | _] = error_class.errors
 
@@ -253,8 +281,15 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
 
   describe "handle_unexpected_event/4" do
     test "returns :keep_state_and_data and logs warning" do
+      agent_spec = %AgentSpec{
+        stages: [],
+        memory_sources: [],
+        agent_config: %{},
+        callback_module: MockAgent
+      }
+
       data = %{
-        agent_module: MockAgent,
+        agent_spec: agent_spec,
         session_id: "unexpected_session"
       }
 
@@ -279,8 +314,15 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
         cause: "Test error"
       }
 
+      agent_spec = %AgentSpec{
+        stages: [],
+        memory_sources: [],
+        agent_config: %{},
+        callback_module: MockAgent
+      }
+
       original_data = %{
-        agent_module: MockAgent,
+        agent_spec: agent_spec,
         session_id: "test_session",
         current_state: %{old: "state"},
         result_manager: ResultManager.new(),
@@ -296,7 +338,8 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
       end)
 
       expect(StateManager, :execute_error_callback, fn
-        MockAgent, _error_class, _current_state ->
+        agent_spec, _error_class, _current_state ->
+          assert agent_spec.callback_module == MockAgent
           {:retry, new_agent_state}
       end)
 
@@ -305,7 +348,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
           ErrorHandler.handle_execution_error(error_detail, original_data)
 
         # Verify core configuration is preserved
-        assert reset_data.agent_module == original_data.agent_module
+        assert reset_data.agent_spec == original_data.agent_spec
         assert reset_data.session_id == original_data.session_id
         assert %ResultManager{} = reset_data.result_manager
 
@@ -319,8 +362,15 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
     end
 
     test "clear_batch_state clears batch-specific fields" do
+      agent_spec = %AgentSpec{
+        stages: [],
+        memory_sources: [],
+        agent_config: %{},
+        callback_module: MockAgent
+      }
+
       original_data = %{
-        agent_module: MockAgent,
+        agent_spec: agent_spec,
         session_id: "test_session",
         current_state: %{preserved: "state"},
         result_manager: ResultManager.new(),
@@ -334,7 +384,8 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
       end)
 
       expect(StateManager, :execute_error_callback, fn
-        MockAgent, _error_class, _current_state ->
+        agent_spec, _error_class, _current_state ->
+          assert agent_spec.callback_module == MockAgent
           {:stop, "batch failed"}
       end)
 
@@ -342,7 +393,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
         {:stop, _reason, cleaned_data} =
           ErrorHandler.handle_stage_error(:test_node, "test error", original_data)
 
-        assert cleaned_data.agent_module == original_data.agent_module
+        assert cleaned_data.agent_spec == original_data.agent_spec
         assert cleaned_data.session_id == original_data.session_id
         assert cleaned_data.current_state == original_data.current_state
         assert cleaned_data.result_manager == original_data.result_manager
