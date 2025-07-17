@@ -161,19 +161,23 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
 
     client(llm_params, opts)
     |> Req.post(url: "/models/{model}:generateContent", json: payload)
-    |> parse_response()
+    |> parse_response(generation_config)
   end
 
-  defp parse_response({:ok, %Req.Response{status: 200, body: body}}), do: get_candidate(body)
+  defp parse_response({:ok, %Req.Response{status: 200, body: body}}, params),
+    do: get_candidate(body, params)
 
-  defp parse_response({:ok, %Req.Response{status: status, body: body}})
+  defp parse_response({:ok, %Req.Response{status: status, body: body}}, _)
        when status in 400..499,
        do: {:error, InvalidRequest.exception(module: __MODULE__, cause: body)}
 
-  defp parse_response({:ok, %Req.Response{status: status, body: body}}) when status in 500..599,
-    do: {:error, UnexpectedLLMResponse.exception(module: __MODULE__, status: status, cause: body)}
+  defp parse_response({:ok, %Req.Response{status: status, body: body}}, _)
+       when status in 500..599,
+       do:
+         {:error,
+          UnexpectedLLMResponse.exception(module: __MODULE__, status: status, cause: body)}
 
-  defp parse_response({:error, err}),
+  defp parse_response({:error, err}, _),
     do:
       {:error,
        UnexpectedLLMResponse.exception(
@@ -181,15 +185,35 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
          cause: err
        )}
 
-  defp get_candidate_content(%{"text" => text_content}) when is_binary(text_content),
-    do: {:ok, %TextPart{text: text_content}}
+  defp get_candidate_content(%{"text" => text_content}, params)
+       when is_binary(text_content) and is_map_key(params, :response_schema) do
+    case Jason.decode(text_content) do
+      {:ok, json_data} ->
+        {:ok, %DataPart{data: json_data}}
 
-  defp get_candidate_content(%{
-         "functionCall" => %{
-           "args" => args,
-           "name" => name
-         }
-       }) do
+      {:error, _} ->
+        {:error,
+         UnexpectedLLMResponse.exception(
+           module: __MODULE__,
+           cause: "Failed to decode JSON response part: #{inspect(text_content)}"
+         )}
+    end
+  end
+
+  defp get_candidate_content(%{"text" => text_content}, _params)
+       when is_binary(text_content) do
+    {:ok, %TextPart{text: text_content}}
+  end
+
+  defp get_candidate_content(
+         %{
+           "functionCall" => %{
+             "args" => args,
+             "name" => name
+           }
+         },
+         _params
+       ) do
     {:ok,
      %FunctionCallPart{
        function_call: %{
@@ -199,11 +223,11 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
      }}
   end
 
-  defp get_candidate_content(%{"thoughtSignature" => signature}) do
+  defp get_candidate_content(%{"thoughtSignature" => signature}, _params) do
     {:ok, %ThoughtPart{thought_signature: signature}}
   end
 
-  defp get_candidate_content(unknown_part) do
+  defp get_candidate_content(unknown_part, _params) do
     {:error,
      UnexpectedLLMResponse.exception(
        module: __MODULE__,
@@ -211,12 +235,15 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
      )}
   end
 
-  defp get_candidate(%{
-         "candidates" => [
-           %{"content" => %{"parts" => parts}} | _
-         ]
-       }) do
-    results = Enum.map(parts, &get_candidate_content/1)
+  defp get_candidate(
+         %{
+           "candidates" => [
+             %{"content" => %{"parts" => parts}} | _
+           ]
+         },
+         params
+       ) do
+    results = Enum.map(parts, &get_candidate_content(&1, params))
 
     {successes, errors} =
       Enum.reduce(results, {[], []}, fn
@@ -230,7 +257,7 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
     end
   end
 
-  defp get_candidate(%{"candidates" => []} = body) do
+  defp get_candidate(%{"candidates" => []} = body, _params) do
     {:error,
      UnexpectedLLMResponse.exception(
        module: __MODULE__,
@@ -238,7 +265,7 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
      )}
   end
 
-  defp get_candidate(body) do
+  defp get_candidate(body, _params) do
     {:error,
      UnexpectedLLMResponse.exception(
        module: __MODULE__,

@@ -41,7 +41,7 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
               default: "gemini-2.0-flash"
             ],
             response_schema: [
-              type: :map,
+              type: :any,
               doc: """
               OpenAPI 3.0 schema for the response, if filled, will enable the structured response feature
               """
@@ -92,7 +92,7 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
         top_p: config.top_p,
         top_k: config.top_k,
         key: api_key(config.api_key),
-        response_schema: config.structured_response,
+        response_schema: OpenApiSpex.OpenApi.to_map(config.structured_response),
         tools: parse_dsl_tools(tools),
         model: model
       ]
