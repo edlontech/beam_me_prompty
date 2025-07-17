@@ -138,20 +138,22 @@ defmodule BeamMePrompty.LLM.OpenAI do
 
   defp call_api(messages, llm_params, opts) do
     payload =
-      %{
-        model: llm_params[:model],
-        messages: prepare_messages(messages),
-        max_tokens: llm_params[:max_tokens],
-        temperature: llm_params[:temperature],
-        top_p: llm_params[:top_p],
-        frequency_penalty: llm_params[:frequency_penalty],
-        presence_penalty: llm_params[:presence_penalty],
-        response_format: llm_params[:response_format],
-        seed: llm_params[:seed],
-        tools: llm_params[:tools],
-        tool_choice: llm_params[:tool_choice]
-      }
-      |> Map.reject(fn {_k, v} -> is_nil(v) end)
+      Map.reject(
+        %{
+          model: llm_params[:model],
+          messages: prepare_messages(messages),
+          max_tokens: llm_params[:max_tokens],
+          temperature: llm_params[:temperature],
+          top_p: llm_params[:top_p],
+          frequency_penalty: llm_params[:frequency_penalty],
+          presence_penalty: llm_params[:presence_penalty],
+          response_format: llm_params[:response_format],
+          seed: llm_params[:seed],
+          tools: llm_params[:tools],
+          tool_choice: llm_params[:tool_choice]
+        },
+        fn {_k, v} -> is_nil(v) end
+      )
 
     client(llm_params, opts)
     |> Req.post(url: "/chat/completions", json: payload)
@@ -376,8 +378,7 @@ defmodule BeamMePrompty.LLM.OpenAI do
   end
 
   defp prepare_messages(keyword_messages) do
-    keyword_messages
-    |> Enum.flat_map(fn
+    Enum.flat_map(keyword_messages, fn
       {:system, parts} ->
         case format_dsl_parts_to_openai_message(parts, "system") do
           nil -> []

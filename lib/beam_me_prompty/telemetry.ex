@@ -29,7 +29,7 @@ defmodule BeamMePrompty.Telemetry do
       agent_module: agent_module,
       session_id: session_id,
       reason: reason,
-      num_results: result_manager |> BeamMePrompty.Agent.Internals.ResultManager.completed_count()
+      num_results: BeamMePrompty.Agent.Internals.ResultManager.completed_count(result_manager)
     }
 
     :telemetry.execute(
@@ -260,14 +260,17 @@ defmodule BeamMePrompty.Telemetry do
     detail_type = determine_tool_execution_detail_type(status, result_or_error)
 
     metadata =
-      %{
-        agent_module: agent_module,
-        session_id: session_id,
-        stage_name: stage_name,
-        tool_name: tool_name,
-        status: status
-      }
-      |> Map.put(elem(detail_type, 0), elem(detail_type, 1))
+      Map.put(
+        %{
+          agent_module: agent_module,
+          session_id: session_id,
+          stage_name: stage_name,
+          tool_name: tool_name,
+          status: status
+        },
+        elem(detail_type, 0),
+        elem(detail_type, 1)
+      )
 
     :telemetry.execute(
       @event_prefix ++ [:tool_execution, :stop],
@@ -288,7 +291,7 @@ defmodule BeamMePrompty.Telemetry do
   defp determine_tool_error_reason_type(result_or_error) do
     cond do
       is_struct(result_or_error, BeamMePrompty.LLM.Errors.ToolError) ->
-        result_or_error.cause |> get_payload_type()
+        get_payload_type(result_or_error.cause)
 
       is_struct(result_or_error) ->
         result_or_error.__struct__

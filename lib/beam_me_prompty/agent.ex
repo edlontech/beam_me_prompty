@@ -242,18 +242,15 @@ defmodule BeamMePrompty.Agent do
       end
 
       def stages do
-        __MODULE__
-        |> Dsl.Info.agent()
+        Dsl.Info.agent(__MODULE__)
       end
 
       def memory_sources do
-        __MODULE__
-        |> Dsl.Info.memory()
+        Dsl.Info.memory(__MODULE__)
       end
 
       def agent_config do
-        __MODULE__
-        |> Dsl.Info.agent_options()
+        Dsl.Info.agent_options(__MODULE__)
       end
 
       def to_spec do

@@ -131,15 +131,17 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
 
   defp call_api(messages, llm_params, opts) do
     generation_config =
-      %{
-        top_k: llm_params[:top_k],
-        top_p: llm_params[:top_p],
-        temperature: llm_params[:temperature],
-        max_output_tokens: llm_params[:max_output_tokens],
-        thinking_config: llm_params[:thinking_config],
-        response_schema: llm_params[:response_schema]
-      }
-      |> Map.reject(fn {_k, v} -> is_nil(v) end)
+      Map.reject(
+        %{
+          top_k: llm_params[:top_k],
+          top_p: llm_params[:top_p],
+          temperature: llm_params[:temperature],
+          max_output_tokens: llm_params[:max_output_tokens],
+          thinking_config: llm_params[:thinking_config],
+          response_schema: llm_params[:response_schema]
+        },
+        fn {_k, v} -> is_nil(v) end
+      )
 
     generation_config =
       if llm_params[:response_schema] do

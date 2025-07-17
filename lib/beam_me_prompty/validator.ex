@@ -61,7 +61,6 @@ defmodule BeamMePrompty.Validator do
   defp format_path([]), do: "root"
 
   defp format_path(path) when is_list(path) do
-    path
-    |> Enum.map_join(".", &to_string/1)
+    Enum.map_join(path, ".", &to_string/1)
   end
 end

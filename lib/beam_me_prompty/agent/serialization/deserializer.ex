@@ -525,8 +525,7 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
 
   defp deserialize_keyword_list(keyword_list) when is_list(keyword_list) do
     opts =
-      keyword_list
-      |> Enum.map(fn
+      Enum.map(keyword_list, fn
         [key_str, value] when is_binary(key_str) ->
           {String.to_existing_atom(key_str), deserialize_keyword_value(value)}
 
@@ -605,8 +604,7 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
   end
 
   defp deserialize_map_values(map) when is_map(map) do
-    map
-    |> Enum.reduce_while({:ok, %{}}, fn {k, v}, {:ok, acc} ->
+    Enum.reduce_while(map, {:ok, %{}}, fn {k, v}, {:ok, acc} ->
       case deserialize_element(v) do
         {:ok, deserialized_v} -> {:cont, {:ok, Map.put(acc, k, deserialized_v)}}
         {:error, reason} -> {:halt, {:error, reason}}

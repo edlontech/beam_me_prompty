@@ -86,22 +86,22 @@ defmodule BeamMePrompty.LLM.OpenAIOpts do
           {:ok, t()} | {:error, Splode.Error.t()}
   def validate(model, tools, config) do
     config =
-      [
-        max_tokens: config.max_tokens,
-        temperature: config.temperature,
-        top_p: config.top_p,
-        frequency_penalty: config.frequency_penalty,
-        presence_penalty: config.presence_penalty,
-        key:
-          config.api_key
-          |> api_key(),
-        response_format: format_response_schema(config.structured_response),
-        seed: get_in(config.other_params, [:seed]),
-        tools: parse_dsl_tools(tools),
-        tool_choice: get_in(config.other_params, [:tool_choice]),
-        model: model
-      ]
-      |> Keyword.reject(fn {_, v} -> is_nil(v) end)
+      Keyword.reject(
+        [
+          max_tokens: config.max_tokens,
+          temperature: config.temperature,
+          top_p: config.top_p,
+          frequency_penalty: config.frequency_penalty,
+          presence_penalty: config.presence_penalty,
+          key: api_key(config.api_key),
+          response_format: format_response_schema(config.structured_response),
+          seed: get_in(config.other_params, [:seed]),
+          tools: parse_dsl_tools(tools),
+          tool_choice: get_in(config.other_params, [:tool_choice]),
+          model: model
+        ],
+        fn {_, v} -> is_nil(v) end
+      )
 
     case NimbleOptions.validate(config, @schema) do
       {:ok, parsed_config} ->

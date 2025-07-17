@@ -248,17 +248,6 @@ mix check
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE.md) file for details.
 
-## Roadmap
-
-- [ ] OpenAI and Hugging Faces Client
-- [ ] Streamming Support
-- [ ] Better Telemetry
-- [ ] More default memories implementation
-- [ ] Database Persisted Agents
-- [ ] A2A Protocol
-- [ ] MCP Protocol
-- [ ] Real-time Observability
-
 ---
 
 **Happy Prompting! 🎉**

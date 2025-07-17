@@ -88,19 +88,19 @@ defmodule BeamMePrompty.LLM.AnthropicOpts do
           {:ok, t()} | {:error, Splode.Error.t()}
   def validate(model, tools, config) do
     config =
-      [
-        max_tokens: config.max_tokens,
-        temperature: config.temperature,
-        top_p: config.top_p,
-        top_k: config.top_k,
-        api_key:
-          config.api_key
-          |> api_key(),
-        thinking_budget: config.thinking_budget,
-        tools: parse_dsl_tools(tools),
-        model: model
-      ]
-      |> Keyword.reject(fn {_, v} -> is_nil(v) end)
+      Keyword.reject(
+        [
+          max_tokens: config.max_tokens,
+          temperature: config.temperature,
+          top_p: config.top_p,
+          top_k: config.top_k,
+          api_key: api_key(config.api_key),
+          thinking_budget: config.thinking_budget,
+          tools: parse_dsl_tools(tools),
+          model: model
+        ],
+        fn {_, v} -> is_nil(v) end
+      )
 
     case NimbleOptions.validate(config, @schema) do
       {:ok, parsed_config} ->

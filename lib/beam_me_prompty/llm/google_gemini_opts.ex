@@ -91,9 +91,7 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
         temperature: config.temperature,
         top_p: config.top_p,
         top_k: config.top_k,
-        key:
-          config.api_key
-          |> api_key(),
+        key: api_key(config.api_key),
         response_schema: config.structured_response,
         tools: parse_dsl_tools(tools),
         model: model

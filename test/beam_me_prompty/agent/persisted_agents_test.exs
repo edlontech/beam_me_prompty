@@ -18,7 +18,7 @@ defmodule BeamMePrompty.Agent.PersistedAgentsTest do
 
       assert %{agents: agents, next_after: nil} = result
       assert length(agents) == 2
-      assert Enum.map(agents, & &1.id) |> Enum.sort() == [agent1.id, agent2.id] |> Enum.sort()
+      assert Enum.map(agents, & &1.id) |> Enum.sort() == Enum.sort([agent1.id, agent2.id])
     end
 
     test "filters agents by agent_name" do
@@ -279,7 +279,7 @@ defmodule BeamMePrompty.Agent.PersistedAgentsTest do
       assert %{agents: agents, next_after: nil} = result
       assert length(agents) == 2
       agent_ids = Enum.map(agents, & &1.id) |> Enum.sort()
-      assert agent_ids == [agent1.id, agent2.id] |> Enum.sort()
+      assert agent_ids == Enum.sort([agent1.id, agent2.id])
     end
 
     test "returns agents matching multiple metadata filters" do
