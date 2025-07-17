@@ -44,4 +44,3 @@ defmodule BeamMePrompty.TestTools.Calculator do
     {:error, "Division by zero is not allowed"}
   end
 end
-

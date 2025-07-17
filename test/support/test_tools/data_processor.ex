@@ -60,4 +60,3 @@ defmodule BeamMePrompty.TestTools.DataProcessor do
     {:error, "Unsupported operation: #{operation}"}
   end
 end
-

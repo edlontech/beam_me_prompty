@@ -41,4 +41,3 @@ defmodule BeamMePrompty.IntegrationAgents.Anthropic.AgentWithTools do
     end
   end
 end
-

@@ -36,4 +36,3 @@ defmodule BeamMePrompty.TestTools.Weather do
     {:ok, weather_data}
   end
 end
-

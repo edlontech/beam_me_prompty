@@ -78,4 +78,3 @@ defmodule BeamMePrompty.IntegrationAgents.Anthropic.FullFeaturedAgent do
     end
   end
 end
-

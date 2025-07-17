@@ -15,4 +15,3 @@ defmodule BeamMePrompty.IntegrationAgents.Anthropic.SimpleAgent do
     end
   end
 end
-

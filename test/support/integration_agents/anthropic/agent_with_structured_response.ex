@@ -38,4 +38,3 @@ defmodule BeamMePrompty.IntegrationAgents.Anthropic.AgentWithStructuredResponse 
     end
   end
 end
-
