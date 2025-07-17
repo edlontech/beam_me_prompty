@@ -18,7 +18,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
       agent_spec = %AgentSpec{
         stages: [],
         memory_sources: [],
-        agent_config: %{},
+        agent_config: %{name: "Mock Agent", version: "1.0"},
         callback_module: MockAgent
       }
 
@@ -174,7 +174,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
       agent_spec = %AgentSpec{
         stages: [],
         memory_sources: [],
-        agent_config: %{},
+        agent_config: %{name: "Mock Agent", version: "1.0"},
         callback_module: MockAgent
       }
 
@@ -216,7 +216,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
       agent_spec = %AgentSpec{
         stages: [],
         memory_sources: [],
-        agent_config: %{},
+        agent_config: %{name: "Mock Agent", version: "1.0"},
         callback_module: MockAgent
       }
 
@@ -284,7 +284,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
       agent_spec = %AgentSpec{
         stages: [],
         memory_sources: [],
-        agent_config: %{},
+        agent_config: %{name: "Mock Agent", version: "1.0"},
         callback_module: MockAgent
       }
 
@@ -365,7 +365,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandlerTest do
       agent_spec = %AgentSpec{
         stages: [],
         memory_sources: [],
-        agent_config: %{},
+        agent_config: %{name: "Mock Agent", version: "1.0"},
         callback_module: MockAgent
       }
 

@@ -16,6 +16,8 @@ defmodule BeamMePrompty.IntegrationAgents.OpenAI.FullFeaturedAgent do
   end
 
   agent do
+    name "OpenAI Full Featured Agent"
+
     stage :collect_data do
       llm "gpt-4o-mini", BeamMePrompty.LLM.OpenAI do
         with_params do

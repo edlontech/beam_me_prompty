@@ -3,6 +3,8 @@ defmodule BeamMePrompty.IntegrationAgents.Gemini.SimpleAgent do
   use BeamMePrompty.Agent
 
   agent do
+    name "Simple Gemini Agent"
+
     stage :simple_response do
       llm "gemini-2.5-flash", BeamMePrompty.LLM.GoogleGemini do
         with_params do

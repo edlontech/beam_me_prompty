@@ -6,6 +6,8 @@ defmodule BeamMePrompty.IntegrationAgents.Gemini.AgentWithTools do
   alias BeamMePrompty.TestTools.Weather
 
   agent do
+    name "Gemini Agent with Tools"
+
     stage :calculate do
       llm "gemini-2.5-flash", BeamMePrompty.LLM.GoogleGemini do
         with_params do

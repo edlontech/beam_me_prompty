@@ -1,6 +1,7 @@
 defmodule BeamMePrompty.Agent.SerializerTest do
   use ExUnit.Case, async: true
 
+  alias BeamMePrompty.Agent.AgentSpec
   alias BeamMePrompty.Agent.Dsl
   alias BeamMePrompty.Agent.Serialization
   alias BeamMePrompty.Errors.DeserializationError
@@ -33,8 +34,9 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             entrypoint: false
           }
         ],
-        memory: [],
-        agent_config: %{version: "0.1.0", agent_state: :stateless}
+        memory_sources: [],
+        agent_config: %{version: "0.1.0", agent_state: :stateless},
+        callback_module: BeamMePrompty.FullAgent
       }
 
       assert {:ok, json_string} = Serialization.serialize(agent_definition)
@@ -59,7 +61,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             entrypoint: false
           }
         ],
-        memory: [
+        memory_sources: [
           %Dsl.MemorySource{
             name: :short_term,
             description: "Short-term memory",
@@ -68,7 +70,8 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             default: true
           }
         ],
-        agent_config: %{version: "0.1.0", agent_state: :stateless}
+        agent_config: %{version: "0.1.0", agent_state: :stateless},
+        callback_module: BeamMePrompty.FullAgent
       }
 
       assert {:ok, json_string} = Serialization.serialize(agent_definition)
@@ -93,8 +96,9 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             entrypoint: false
           }
         ],
-        memory: [],
-        agent_config: %{version: "0.1.0", agent_state: :stateless}
+        memory_sources: [],
+        agent_config: %{version: "0.1.0", agent_state: :stateless},
+        callback_module: BeamMePrompty.FullAgent
       }
 
       assert {:ok, json_string} = Serialization.serialize(agent_definition)
@@ -133,7 +137,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             entrypoint: false
           }
         ],
-        memory: [],
+        memory_sources: [],
         agent_config: %{version: "0.1.0", agent_state: :stateless}
       }
 
@@ -210,7 +214,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
     test "deserializes a basic agent definition" do
       json_string = """
       {
-        "agent": [
+        "stages": [
           {
             "__struct__": "BeamMePrompty.Agent.Dsl.Stage",
             "name": "first_stage",
@@ -250,22 +254,26 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             "entrypoint": false
           }
         ],
-        "memory": [],
-        "agent_config": {"version": "0.1.0", "agent_state": "stateless"}
+        "memory_sources": [],
+        "agent_config": {"version": "0.1.0", "agent_state": "stateless"},
+        "callback_module": "Elixir.BeamMePrompty.FullAgent"
       }
       """
 
       assert {:ok, agent_definition} = Serialization.deserialize(json_string)
       assert is_map(agent_definition)
-      assert %{agent: [stage], memory: [], agent_config: _agent_config} = agent_definition
+
+      assert %{stages: [stage], memory_sources: [], agent_config: _agent_config} =
+               agent_definition
+
       assert %Dsl.Stage{name: :first_stage} = stage
     end
 
     test "deserializes agent with memory sources" do
       json_string = """
       {
-        "agent": [],
-        "memory": [
+        "stages": [],
+        "memory_sources": [
           {
             "__struct__": "BeamMePrompty.Agent.Dsl.MemorySource",
             "name": "short_term",
@@ -275,12 +283,15 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             "default": true
           }
         ],
-        "agent_config": {"version": "0.1.0", "agent_state": "stateless"}
+        "agent_config": {"version": "0.1.0", "agent_state": "stateless"},
+        "callback_module": "Elixir.BeamMePrompty.FullAgent"
       }
       """
 
       assert {:ok, agent_definition} = Serialization.deserialize(json_string)
-      assert %{agent: [], memory: [memory_source], agent_config: _agent_config} = agent_definition
+
+      assert %{stages: [], memory_sources: [memory_source], agent_config: _agent_config} =
+               agent_definition
 
       assert %Dsl.MemorySource{name: :short_term, module: BeamMePrompty.Agent.Memory.ETS} =
                memory_source
@@ -289,7 +300,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
     test "deserializes function references in API keys" do
       json_string = """
       {
-        "agent": [
+        "stages": [
           {
             "__struct__": "BeamMePrompty.Agent.Dsl.Stage",
             "name": "first_stage",
@@ -322,13 +333,17 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             "entrypoint": false
           }
         ],
-        "memory": [],
-        "agent_config": {"version": "0.1.0", "agent_state": "stateless"}
+        "memory_sources": [],
+        "agent_config": {"version": "0.1.0", "agent_state": "stateless"},
+        "callback_module": "Elixir.BeamMePrompty.FullAgent"
       }
       """
 
       assert {:ok, agent_definition} = Serialization.deserialize(json_string)
-      assert %{agent: [stage], memory: [], agent_config: _agent_config} = agent_definition
+
+      assert %{stages: [stage], memory_sources: [], agent_config: _agent_config} =
+               agent_definition
+
       assert %Dsl.Stage{llm: %Dsl.LLM{params: %Dsl.LLMParams{api_key: api_key}}} = stage
       assert is_function(api_key, 1)
     end
@@ -336,7 +351,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
     test "deserializes different message part types" do
       json_string = """
       {
-        "agent": [
+        "stages": [
           {
             "__struct__": "BeamMePrompty.Agent.Dsl.Stage",
             "name": "first_stage",
@@ -378,13 +393,17 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             "entrypoint": false
           }
         ],
-        "memory": [],
-        "agent_config": {"version": "0.1.0", "agent_state": "stateless"}
+        "memory_sources": [],
+        "agent_config": {"version": "0.1.0", "agent_state": "stateless"},
+        "callback_module": "Elixir.BeamMePrompty.FullAgent"
       }
       """
 
       assert {:ok, agent_definition} = Serialization.deserialize(json_string)
-      assert %{agent: [stage], memory: [], agent_config: _agent_config} = agent_definition
+
+      assert %{stages: [stage], memory_sources: [], agent_config: _agent_config} =
+               agent_definition
+
       assert %Dsl.Stage{llm: %Dsl.LLM{messages: [message]}} = stage
       assert %Dsl.Message{content: [text_part, data_part, file_part]} = message
       assert %Dsl.TextPart{text: "Hello"} = text_part
@@ -447,8 +466,8 @@ defmodule BeamMePrompty.Agent.SerializerTest do
 
   describe "validate/1" do
     test "validates a valid agent definition" do
-      agent_definition = %{
-        agent: [
+      agent_definition = %AgentSpec{
+        stages: [
           %Dsl.Stage{
             name: :first_stage,
             depends_on: nil,
@@ -462,7 +481,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             entrypoint: false
           }
         ],
-        memory: [
+        memory_sources: [
           %Dsl.MemorySource{
             name: :short_term,
             description: "Short-term memory",
@@ -471,7 +490,8 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             default: true
           }
         ],
-        agent_config: %{version: "0.1.0", agent_state: :stateless}
+        agent_config: %{version: "0.1.0", agent_state: :stateless},
+        callback_module: BeamMePrompty.FullAgent
       }
 
       assert :ok = Serialization.validate(agent_definition)
@@ -507,7 +527,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
   describe "round-trip serialization" do
     test "serializes and deserializes a complete agent definition" do
       agent_definition = %{
-        agent: [
+        stages: [
           %Dsl.Stage{
             name: :first_stage,
             depends_on: nil,
@@ -551,7 +571,7 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             entrypoint: false
           }
         ],
-        memory: [
+        memory_sources: [
           %Dsl.MemorySource{
             name: :short_term,
             description: "Short-term memory",
@@ -560,14 +580,19 @@ defmodule BeamMePrompty.Agent.SerializerTest do
             default: true
           }
         ],
-        agent_config: %{version: "0.1.0", agent_state: :stateless, session_id: "test-session"}
+        agent_config: %{version: "0.1.0", agent_state: :stateless, session_id: "test-session"},
+        callback_module: BeamMePrompty.FullAgent
       }
 
       assert {:ok, json_string} = Serialization.serialize(agent_definition)
       assert {:ok, deserialized_definition} = Serialization.deserialize(json_string)
       assert :ok = Serialization.validate(deserialized_definition)
 
-      assert %{agent: [stage1, stage2], memory: [memory_source], agent_config: agent_config} =
+      assert %{
+               stages: [stage1, stage2],
+               memory_sources: [memory_source],
+               agent_config: agent_config
+             } =
                deserialized_definition
 
       assert %Dsl.Stage{name: :first_stage, depends_on: nil} = stage1

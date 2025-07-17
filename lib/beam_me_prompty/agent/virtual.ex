@@ -42,8 +42,6 @@ defmodule BeamMePrompty.Agent.Virtual do
 
   alias BeamMePrompty.Agent.AgentSpec
   alias BeamMePrompty.Agent.Executor
-  alias BeamMePrompty.Agent.Serialization
-  alias BeamMePrompty.Errors.ValidationError
 
   @typedoc """
   Virtual agent startup options
@@ -57,7 +55,7 @@ defmodule BeamMePrompty.Agent.Virtual do
   """
   @type virtual_agent_opts ::
           keyword(
-            agent_spec: map() | String.t(),
+            agent_spec: AgentSpec.t(),
             input: map(),
             initial_state: map(),
             opts: keyword(),
@@ -68,7 +66,7 @@ defmodule BeamMePrompty.Agent.Virtual do
   Runs a virtual agent synchronously and waits for completion.
 
   ## Parameters
-    * `agent_spec` - The agent specification (map or JSON string)
+    * `agent_spec` - The agent specification
     * `input` - Global input data for the agent (optional, defaults to empty map)
     * `initial_state` - The initial state of the agent (optional, defaults to empty map)
     * `opts` - Additional options (see `start_link/4`) (optional, defaults to empty list)
@@ -87,18 +85,14 @@ defmodule BeamMePrompty.Agent.Virtual do
       )
   """
   @spec run_sync(
-          agent_spec :: map() | String.t(),
+          agent_spec :: AgentSpec.t(),
           input :: map(),
           initial_state :: map(),
           opts :: keyword(),
           timeout :: integer()
         ) :: {:ok, any()} | {:error, any()}
   def run_sync(agent_spec, input \\ %{}, initial_state \\ %{}, opts \\ [], timeout \\ 30_000) do
-    with {:ok, deserialized_spec} <- deserialize_agent_spec(agent_spec),
-         :ok <- Serialization.validate(deserialized_spec),
-         {:ok, canonical_spec} <- AgentSpec.from_map(deserialized_spec, __MODULE__) do
-      Executor.execute(canonical_spec, input, initial_state, opts, timeout)
-    end
+    Executor.execute(agent_spec, input, initial_state, opts, timeout)
   end
 
   @doc """
@@ -127,11 +121,7 @@ defmodule BeamMePrompty.Agent.Virtual do
     initial_state = Keyword.get(start_opts, :initial_state, %{})
     opts = Keyword.get(start_opts, :opts, [])
 
-    with {:ok, deserialized_spec} <- deserialize_agent_spec(agent_spec),
-         :ok <- Serialization.validate(deserialized_spec),
-         {:ok, canonical_spec} <- AgentSpec.from_map(deserialized_spec, __MODULE__) do
-      Executor.start_link(canonical_spec, input, initial_state, opts)
-    end
+    Executor.start_link(agent_spec, input, initial_state, opts)
   end
 
   @doc """
@@ -165,18 +155,5 @@ defmodule BeamMePrompty.Agent.Virtual do
       start: {__MODULE__, :start_link, [start_opts]},
       restart: :transient
     }
-  end
-
-  defp deserialize_agent_spec(agent_spec) when is_map(agent_spec) do
-    {:ok, agent_spec}
-  end
-
-  defp deserialize_agent_spec(agent_spec) when is_binary(agent_spec) do
-    Serialization.deserialize(agent_spec)
-  end
-
-  defp deserialize_agent_spec(agent_spec) do
-    {:error,
-     ValidationError.exception(cause: "Invalid agent spec format: #{inspect(agent_spec)}")}
   end
 end

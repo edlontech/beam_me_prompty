@@ -6,6 +6,8 @@ defmodule BeamMePrompty.IntegrationAgents.Anthropic.AgentWithTools do
   alias BeamMePrompty.TestTools.Weather
 
   agent do
+    name "Anthropic Agent with Tools"
+
     stage :calculate do
       llm "claude-3-5-haiku-20241022", BeamMePrompty.LLM.Anthropic do
         with_params do

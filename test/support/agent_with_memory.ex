@@ -12,6 +12,8 @@ defmodule BeamMePrompty.AgentWithMemory do
   end
 
   agent do
+    name "Agent with Memory"
+
     stage :first_stage do
       llm "test-model", BeamMePrompty.FakeLlmClient do
         message :system, [text_part("You are a helpful assistant.")]

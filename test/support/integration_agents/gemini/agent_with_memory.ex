@@ -12,6 +12,8 @@ defmodule BeamMePrompty.IntegrationAgents.Gemini.AgentWithMemory do
   end
 
   agent do
+    name "Gemini Agent with Memory"
+
     stage :store_info do
       llm "gemini-2.5-flash", BeamMePrompty.LLM.GoogleGemini do
         with_params do

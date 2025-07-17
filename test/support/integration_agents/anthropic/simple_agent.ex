@@ -3,6 +3,8 @@ defmodule BeamMePrompty.IntegrationAgents.Anthropic.SimpleAgent do
   use BeamMePrompty.Agent
 
   agent do
+    name "Simple Anthropic Agent"
+
     stage :simple_response do
       llm "claude-3-5-haiku-20241022", BeamMePrompty.LLM.Anthropic do
         with_params do

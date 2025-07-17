@@ -123,7 +123,7 @@ defmodule BeamMePrompty.Agent.Internals do
     ready_nodes_from_dag = DAG.find_ready_nodes(data.dag, current_results)
 
     Logger.debug(
-      "[BeamMePrompty] Agent [#{inspect(data.agent_spec)}](sid: #{inspect(data.session_id)}) #{inspect(ready_nodes_from_dag)}, Completed: #{completed_count}/#{total_count}"
+      "[BeamMePrompty] Agent [#{data.agent_spec.agent_config.name}](v: #{data.agent_spec.agent_config.version})(sid: #{inspect(data.session_id)}) #{inspect(ready_nodes_from_dag)}, Completed: #{completed_count}/#{total_count}"
     )
 
     {plan_status, planned_nodes, updated_agent_state} =
@@ -134,7 +134,7 @@ defmodule BeamMePrompty.Agent.Internals do
       )
 
     Logger.debug(
-      "[BeamMePrompty] Agent [#{inspect(data.agent_spec)}](sid: #{inspect(data.session_id)}) Plan callback result - Status: #{inspect(plan_status)}, Planned nodes: #{inspect(planned_nodes)}"
+      "[BeamMePrompty] Agent [#{data.agent_spec.agent_config.name}](v: #{data.agent_spec.agent_config.version})(sid: #{inspect(data.session_id)}) Plan callback result - Status: #{inspect(plan_status)}, Planned nodes: #{inspect(planned_nodes)}"
     )
 
     effective_ready_nodes =
@@ -423,7 +423,7 @@ defmodule BeamMePrompty.Agent.Internals do
     entry_point_stage = find_entry_point_stage(data.dag.nodes)
 
     Logger.debug(
-      "[BeamMePrompty] Agent [#{inspect(data.agent_spec)}] (sid: #{inspect(data.session_id)}) received message: #{inspect(message)}"
+      "[BeamMePrompty] Agent [#{data.agent_spec.agent_config.name}](v: #{data.agent_spec.agent_config.version}) (sid: #{inspect(data.session_id)}) received message: #{inspect(message)}"
     )
 
     if entry_point_stage do

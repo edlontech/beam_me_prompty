@@ -413,6 +413,11 @@ defmodule BeamMePrompty.Agent.Dsl do
       @stage_entity
     ],
     schema: [
+      name: [
+        type: :string,
+        required: true,
+        doc: "A human-readable name for the agent."
+      ],
       agent_state: [
         type: {:one_of, [:stateful, :stateless]},
         default: :stateless,

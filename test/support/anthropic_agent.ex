@@ -5,6 +5,8 @@ defmodule BeamMePrompty.AnthropicAgent do
   alias BeamMePrompty.Agent.Dsl.TextPart
 
   agent do
+    name "Anthropic Agent"
+
     stage :first_stage do
       llm "claude-3-5-haiku-20241022", BeamMePrompty.LLM.Anthropic do
         with_params do

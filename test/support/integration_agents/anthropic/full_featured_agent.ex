@@ -16,6 +16,8 @@ defmodule BeamMePrompty.IntegrationAgents.Anthropic.FullFeaturedAgent do
   end
 
   agent do
+    name "Anthropic Full Featured Agent"
+
     stage :collect_data do
       llm "claude-3-5-haiku-20241022", BeamMePrompty.LLM.Anthropic do
         with_params do

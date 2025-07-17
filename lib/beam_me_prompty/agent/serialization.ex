@@ -28,15 +28,10 @@ defmodule BeamMePrompty.Agent.Serialization do
   Function references are validated to prevent arbitrary code execution.
   """
 
+  alias BeamMePrompty.Agent.AgentSpec
   alias BeamMePrompty.Agent.Dsl
   alias BeamMePrompty.Agent.Serialization.Deserializer
   alias BeamMePrompty.Agent.Serialization.Serializer
-
-  @type serializable_agent :: %{
-          agent: [Dsl.Stage.t()],
-          memory: [Dsl.MemorySource.t()],
-          agent_config: map()
-        }
 
   defdelegate serialize(agent_definition), to: Serializer
 
@@ -54,9 +49,11 @@ defmodule BeamMePrompty.Agent.Serialization do
   - `:ok` - Agent definition is valid
   - `{:error, reason}` - Validation failed
   """
-  @spec validate(serializable_agent()) :: :ok | {:error, BeamMePrompty.Errors.ValidationError.t()}
-  def validate(%{agent: stages, memory: memory_sources, agent_config: agent_config})
-      when is_list(stages) and is_list(memory_sources) and is_map(agent_config) do
+  @spec validate(AgentSpec.t()) :: :ok | {:error, BeamMePrompty.Errors.ValidationError.t()}
+  def validate(%AgentSpec{
+        stages: stages,
+        memory_sources: memory_sources
+      }) do
     case validate_stages(stages) do
       :ok -> validate_memory_sources(memory_sources)
       error -> error

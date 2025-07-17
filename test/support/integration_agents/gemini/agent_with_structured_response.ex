@@ -4,6 +4,8 @@ defmodule BeamMePrompty.IntegrationAgents.Gemini.AgentWithStructuredResponse do
 
   agent do
     stage :structured_analysis do
+      name "Gemini Agent with Structured Response"
+
       llm "gemini-2.5-flash", BeamMePrompty.LLM.GoogleGemini do
         with_params do
           api_key fn -> System.get_env("INTELLIGENCE_GOOGLE_AI_API_KEY") end

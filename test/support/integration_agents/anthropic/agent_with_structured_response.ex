@@ -3,6 +3,8 @@ defmodule BeamMePrompty.IntegrationAgents.Anthropic.AgentWithStructuredResponse 
   use BeamMePrompty.Agent
 
   agent do
+    name "Anthropic Agent with Structured Response"
+
     stage :structured_analysis do
       llm "claude-3-5-haiku-20241022", BeamMePrompty.LLM.Anthropic do
         with_params do

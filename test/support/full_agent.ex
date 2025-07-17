@@ -16,6 +16,7 @@ defmodule BeamMePrompty.FullAgent do
   end
 
   agent do
+    name "Full Test Agent"
     version "0.1.0"
     agent_state :stateless
 

@@ -282,6 +282,8 @@ defmodule BeamMePrompty.AgentTest do
       use BeamMePrompty.Agent
 
       agent do
+        name "Bonked Tool Agent"
+
         stage :first_stage do
           llm "test-model", BeamMePrompty.FakeLlmClient do
             message :system, [text_part("You are a helpful assistant.")]
@@ -421,6 +423,8 @@ defmodule BeamMePrompty.AgentTest do
       use BeamMePrompty.Agent
 
       agent do
+        name "Data Part Agent"
+
         stage :first_stage do
           llm "test-model", BeamMePrompty.FakeLlmClient do
             message :user, [text_part("Test")]

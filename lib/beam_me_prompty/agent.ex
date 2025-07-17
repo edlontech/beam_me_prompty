@@ -254,7 +254,14 @@ defmodule BeamMePrompty.Agent do
       end
 
       def to_spec do
-        AgentSpec.new(stages(), memory_sources(), agent_config(), __MODULE__)
+        AgentSpec.from_map(
+          %{
+            stages: stages(),
+            memory_sources: memory_sources(),
+            agent_config: agent_config()
+          },
+          __MODULE__
+        )
       end
     end
   end

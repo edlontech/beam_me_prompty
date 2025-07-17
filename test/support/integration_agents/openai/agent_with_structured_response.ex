@@ -4,6 +4,8 @@ defmodule BeamMePrompty.IntegrationAgents.OpenAI.AgentWithStructuredResponse do
 
   agent do
     stage :structured_analysis do
+      name "OpenAI Agent with Structured Response"
+
       llm "gpt-4o-mini", BeamMePrompty.LLM.OpenAI do
         with_params do
           api_key fn -> System.get_env("INTELLIGENCE_OPENAI_API_KEY") end

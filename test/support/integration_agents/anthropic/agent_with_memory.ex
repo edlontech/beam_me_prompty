@@ -12,6 +12,8 @@ defmodule BeamMePrompty.IntegrationAgents.Anthropic.AgentWithMemory do
   end
 
   agent do
+    name "Anthropic Agent with Memory"
+
     stage :store_info do
       llm "claude-3-5-haiku-20241022", BeamMePrompty.LLM.Anthropic do
         with_params do

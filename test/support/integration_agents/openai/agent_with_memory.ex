@@ -12,6 +12,8 @@ defmodule BeamMePrompty.IntegrationAgents.OpenAI.AgentWithMemory do
   end
 
   agent do
+    name "OpenAI Agent with Memory"
+
     stage :store_info do
       llm "gpt-4o-mini", BeamMePrompty.LLM.OpenAI do
         with_params do

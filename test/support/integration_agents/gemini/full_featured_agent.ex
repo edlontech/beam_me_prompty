@@ -16,6 +16,8 @@ defmodule BeamMePrompty.IntegrationAgents.Gemini.FullFeaturedAgent do
   end
 
   agent do
+    name "Gemini Full Featured Agent"
+
     stage :collect_data do
       llm "gemini-2.5-flash", BeamMePrompty.LLM.GoogleGemini do
         with_params do

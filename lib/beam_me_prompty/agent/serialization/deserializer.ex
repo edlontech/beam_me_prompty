@@ -6,9 +6,11 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
   JSON representation, including safe module resolution and function reconstruction.
   """
 
+  alias BeamMePrompty.Agent.AgentSpec
   alias BeamMePrompty.Agent.Dsl
   alias BeamMePrompty.Errors.DeserializationError
 
+  @spec deserialize(binary()) :: {:ok, AgentSpec.t()} | {:error, term()}
   def deserialize(json_string) when is_binary(json_string) do
     with {:ok, raw_data} <- Jason.decode(json_string),
          {:ok, agent_definition} <- deserialize_agent(raw_data) do
@@ -24,18 +26,21 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
   end
 
   defp deserialize_agent(%{
-         "agent" => stages,
-         "memory" => memory_sources,
-         "agent_config" => agent_config
+         "stages" => stages,
+         "memory_sources" => memory_sources,
+         "agent_config" => agent_config,
+         "callback_module" => callback_module
        }) do
     with {:ok, deserialized_stages} <- deserialize_stages(stages),
          {:ok, deserialized_memory} <- deserialize_memory_sources(memory_sources),
-         {:ok, deserialized_agent_config} <- deserialize_agent_config(agent_config) do
+         {:ok, deserialized_agent_config} <- deserialize_agent_config(agent_config),
+         {:ok, callback_module} <- deserialize_atom(callback_module) do
       {:ok,
-       %{
-         agent: deserialized_stages,
-         memory: deserialized_memory,
-         agent_config: deserialized_agent_config
+       %AgentSpec{
+         stages: deserialized_stages,
+         memory_sources: deserialized_memory,
+         agent_config: deserialized_agent_config,
+         callback_module: callback_module
        }}
     end
   end

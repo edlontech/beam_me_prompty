@@ -3,8 +3,9 @@ defmodule BeamMePrompty.TestAgent do
   use BeamMePrompty.Agent
 
   agent do
-    version("0.1.0")
-    agent_state(:stateless)
+    name "Test Agent"
+    version "0.1.0"
+    agent_state :stateless
 
     stage :first_stage do
       llm "test-model", BeamMePrompty.FakeLlmClient do

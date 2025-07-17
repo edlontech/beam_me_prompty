@@ -3,6 +3,8 @@ defmodule BeamMePrompty.IntegrationAgents.OpenAI.SimpleAgent do
   use BeamMePrompty.Agent
 
   agent do
+    name "Simple OpenAI Agent"
+
     stage :simple_response do
       llm "gpt-4o-mini", BeamMePrompty.LLM.OpenAI do
         with_params do

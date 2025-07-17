@@ -6,6 +6,8 @@ defmodule BeamMePrompty.IntegrationAgents.OpenAI.AgentWithTools do
   alias BeamMePrompty.TestTools.Weather
 
   agent do
+    name "OpenAI Agent with Tools"
+
     stage :calculate do
       llm "gpt-4o-mini", BeamMePrompty.LLM.OpenAI do
         with_params do

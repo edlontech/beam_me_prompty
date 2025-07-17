@@ -41,7 +41,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandler do
           | {:stop, any(), data_struct()}
   def handle_execution_error(error_detail, data) do
     Logger.debug(
-      "[ErrorHandler] Agent [#{inspect(data.agent_spec)}] (sid: #{inspect(data.session_id)}) handling error: #{inspect(error_detail)}"
+      "[ErrorHandler] Agent [#{data.agent_spec.agent_config.name}](v: #{data.agent_spec.agent_config.version}) (sid: #{inspect(data.session_id)}) handling error: #{inspect(error_detail)}"
     )
 
     error_class = Errors.to_class(error_detail)
@@ -61,7 +61,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandler do
 
       {:error, callback_error} ->
         Logger.error(
-          "[ErrorHandler] Agent [#{inspect(data.agent_spec)}] (sid: #{inspect(data.session_id)}) Error in agent error callback: #{inspect(callback_error)}"
+          "[ErrorHandler] Agent [#{data.agent_spec.agent_config.name}](v: #{data.agent_spec.agent_config.version}) (sid: #{inspect(data.session_id)}) Error in agent error callback: #{inspect(callback_error)}"
         )
 
         {:stop, {:error_callback_failed, callback_error}, data}
@@ -84,7 +84,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandler do
           | {:stop, any(), data_struct()}
   def handle_stage_error(node_name, error_reason, data) do
     Logger.error(
-      "[ErrorHandler] Agent [#{inspect(data.agent_spec)}] (sid: #{inspect(data.session_id)}) Stage execution failed for node #{node_name}: #{inspect(error_reason)}"
+      "[ErrorHandler] Agent [#{data.agent_spec.agent_config.name}](v: #{data.agent_spec.agent_config.version}) (sid: #{inspect(data.session_id)}) Stage execution failed for node #{node_name}: #{inspect(error_reason)}"
     )
 
     stage_execution_error =
@@ -112,7 +112,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandler do
           | {:stop, any(), data_struct()}
   def handle_planning_error(data) do
     Logger.error(
-      "[ErrorHandler] Agent [#{inspect(data.agent_spec)}] (sid: #{inspect(data.session_id)}) Planning error: No nodes ready to execute after agent's handle_plan"
+      "[ErrorHandler] Agent [#{data.agent_spec.agent_config.name}](v: #{data.agent_spec.agent_config.version}) (sid: #{inspect(data.session_id)}) Planning error: No nodes ready to execute after agent's handle_plan"
     )
 
     planning_error =
@@ -172,7 +172,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandler do
   @spec handle_unexpected_event(atom(), any(), any(), data_struct()) :: :keep_state_and_data
   def handle_unexpected_event(state_name, event_type, event_content, data) do
     Logger.warning(
-      "[ErrorHandler] Agent [#{inspect(data.agent_spec)}] (sid: #{inspect(data.session_id)}) unexpected event in #{state_name}: #{inspect(event_type)} - #{inspect(event_content)}"
+      "[ErrorHandler] Agent [#{data.agent_spec.agent_config.name}](v: #{data.agent_spec.agent_config.version}) (sid: #{inspect(data.session_id)}) unexpected event in #{state_name}: #{inspect(event_type)} - #{inspect(event_content)}"
     )
 
     :keep_state_and_data
@@ -184,7 +184,7 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandler do
     case agent_response do
       {:retry, new_agent_state_for_retry} ->
         Logger.debug(
-          "[ErrorHandler] Agent [#{inspect(data.agent_spec)}] (sid: #{inspect(data.session_id)}) Agent requested retry with new state"
+          "[ErrorHandler] Agent [#{data.agent_spec.agent_config.name}](v: #{data.agent_spec.agent_config.version}) (sid: #{inspect(data.session_id)}) Agent requested retry with new state"
         )
 
         reset_data = reset_for_retry(data, new_agent_state_for_retry)
@@ -192,21 +192,21 @@ defmodule BeamMePrompty.Agent.Internals.ErrorHandler do
 
       {:stop, stop_reason} ->
         Logger.debug(
-          "[ErrorHandler] Agent [#{inspect(data.agent_spec)}] (sid: #{inspect(data.session_id)}) Agent requested stop: #{inspect(stop_reason)}"
+          "[ErrorHandler] Agent [#{data.agent_spec.agent_config.name}](v: #{data.agent_spec.agent_config.version}) (sid: #{inspect(data.session_id)}) Agent requested stop: #{inspect(stop_reason)}"
         )
 
         {:stop, {:agent_stopped_execution, stop_reason}, data}
 
       {:restart, restart_reason} ->
         Logger.debug(
-          "[ErrorHandler] Agent [#{inspect(data.agent_spec)}] (sid: #{inspect(data.session_id)}) Agent requested restart: #{inspect(restart_reason)}"
+          "[ErrorHandler] Agent [#{data.agent_spec.agent_config.name}](v: #{data.agent_spec.agent_config.version}) (sid: #{inspect(data.session_id)}) Agent requested restart: #{inspect(restart_reason)}"
         )
 
         {:stop, {:restart_requested, restart_reason}, data}
 
       unexpected_response ->
         Logger.error(
-          "[ErrorHandler] Agent [#{inspect(data.agent_spec)}] (sid: #{inspect(data.session_id)}) Unexpected response from agent's handle_error: #{inspect(unexpected_response)}. Stopping."
+          "[ErrorHandler] Agent [#{data.agent_spec.agent_config.name}](v: #{data.agent_spec.agent_config.version}) (sid: #{inspect(data.session_id)}) Unexpected response from agent's handle_error: #{inspect(unexpected_response)}. Stopping."
         )
 
         {:stop, {:unexpected_handle_error_response, unexpected_response}, data}
