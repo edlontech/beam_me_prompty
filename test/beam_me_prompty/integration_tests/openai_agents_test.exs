@@ -1,11 +1,11 @@
-defmodule BeamMePrompty.IntegrationTests.GeminiAgentsTest do
+defmodule BeamMePrompty.IntegrationTests.OpenAIAgentsTest do
   use ExUnit.Case, async: true
 
-  alias BeamMePrompty.IntegrationAgents.Gemini.AgentWithMemory
-  alias BeamMePrompty.IntegrationAgents.Gemini.AgentWithStructuredResponse
-  alias BeamMePrompty.IntegrationAgents.Gemini.AgentWithTools
-  alias BeamMePrompty.IntegrationAgents.Gemini.FullFeaturedAgent
-  alias BeamMePrompty.IntegrationAgents.Gemini.SimpleAgent
+  alias BeamMePrompty.IntegrationAgents.OpenAI.AgentWithMemory
+  alias BeamMePrompty.IntegrationAgents.OpenAI.AgentWithStructuredResponse
+  alias BeamMePrompty.IntegrationAgents.OpenAI.AgentWithTools
+  alias BeamMePrompty.IntegrationAgents.OpenAI.FullFeaturedAgent
+  alias BeamMePrompty.IntegrationAgents.OpenAI.SimpleAgent
 
   @moduletag :integration
 
@@ -24,7 +24,7 @@ defmodule BeamMePrompty.IntegrationTests.GeminiAgentsTest do
              })
 
     assert store_text.text != nil
-    assert recall_text.text =~ "sky"
+    assert recall_text.text =~ "blue"
   end
 
   test "agent with structured response" do
@@ -51,8 +51,21 @@ defmodule BeamMePrompty.IntegrationTests.GeminiAgentsTest do
   end
 
   test "full featured agent" do
-    # Gemini does not support structured response with function calling
-    assert {:error, _} =
+    assert {:ok, %{collect_data: [collect_text | _], analyze_data: analyze_data}} =
              FullFeaturedAgent.run_sync(%{topic: "renewable energy"})
+
+    assert collect_text.text != nil
+
+    assert %{
+             summary: summary,
+             key_findings: key_findings,
+             confidence_score: confidence_score,
+             next_steps: next_steps
+           } = analyze_data
+
+    assert is_binary(summary)
+    assert is_list(key_findings)
+    assert is_number(confidence_score)
+    assert is_list(next_steps)
   end
 end

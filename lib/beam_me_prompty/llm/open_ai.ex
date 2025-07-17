@@ -386,20 +386,25 @@ defmodule BeamMePrompty.LLM.OpenAI do
         end
 
       {:user, parts} ->
-        case format_dsl_parts_to_openai_message(parts, "user") do
-          nil -> []
-          message -> [message]
+        function_result_parts = Enum.filter(parts, &match?(%FunctionResultPart{}, &1))
+
+        if length(function_result_parts) > 0 do
+          format_function_result_parts_to_openai_messages(function_result_parts)
+        else
+          case format_dsl_parts_to_openai_message(parts, "user") do
+            nil -> []
+            message -> [message]
+          end
         end
 
       {:assistant, parts} ->
-        # Check if parts contain function calls or regular content
         {function_call_parts, other_parts} =
           Enum.split_with(parts, fn
             %FunctionCallPart{} -> true
             _ -> false
           end)
 
-        {function_result_parts, content_parts} =
+        {_function_result_parts, content_parts} =
           Enum.split_with(other_parts, fn
             %FunctionResultPart{} -> true
             _ -> false
@@ -407,25 +412,17 @@ defmodule BeamMePrompty.LLM.OpenAI do
 
         messages = []
 
-        # Add content message if there are content parts
         messages =
           case format_dsl_parts_to_openai_message(content_parts, "assistant") do
             nil -> messages
             message -> [message | messages]
           end
 
-        # Add function call message if there are function call parts
         messages =
           case format_function_parts_to_openai_message(function_call_parts) do
             nil -> messages
             message -> [message | messages]
           end
-
-        # Add function result messages
-        function_result_messages =
-          format_function_result_parts_to_openai_messages(function_result_parts)
-
-        messages = messages ++ function_result_messages
 
         Enum.reverse(messages)
     end)

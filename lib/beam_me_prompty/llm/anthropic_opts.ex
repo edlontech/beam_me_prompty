@@ -74,7 +74,7 @@ defmodule BeamMePrompty.LLM.AnthropicOpts do
               ]
             ],
             structured_response: [
-              type: :map,
+              type: :any,
               doc: """
               OpenAPI 3.0 schema for the response, if filled, will enable the structured response feature
               """
