@@ -119,12 +119,18 @@ defmodule BeamMePrompty.LLM.Anthropic do
 
     tooling = prepare_anthropic_tools_payload(llm_params[:tools])
 
+    # Add structured response instructions to system prompt if needed
+    enhanced_system_prompt = enhance_system_prompt_for_structured_response(
+      prepared_data[:system],
+      llm_params[:structured_response]
+    )
+
     payload =
       payload_base
       |> Map.put(:messages, prepared_data[:messages])
       |> then(fn p ->
-        if system_prompt = prepared_data[:system] do
-          Map.put(p, :system, system_prompt)
+        if enhanced_system_prompt do
+          Map.put(p, :system, enhanced_system_prompt)
         else
           p
         end
@@ -135,16 +141,16 @@ defmodule BeamMePrompty.LLM.Anthropic do
 
     client(llm_params, opts)
     |> Req.post(url: "/messages", json: payload)
-    |> parse_response()
+    |> parse_response(llm_params)
   end
 
-  defp parse_response({:ok, %Req.Response{status: 200, body: body}}), do: get_content(body)
+  defp parse_response({:ok, %Req.Response{status: 200, body: body}}, llm_params), do: get_content(body, llm_params)
 
-  defp parse_response({:ok, %Req.Response{status: status, body: body}})
+  defp parse_response({:ok, %Req.Response{status: status, body: body}}, _llm_params)
        when status in 400..499,
        do: {:error, InvalidRequest.exception(module: __MODULE__, cause: body)}
 
-  defp parse_response({:ok, %Req.Response{status: status, body: body}}) when status in 500..599,
+  defp parse_response({:ok, %Req.Response{status: status, body: body}}, _llm_params) when status in 500..599,
     do: {:error, UnexpectedLLMResponse.exception(module: __MODULE__, status: status, cause: body)}
 
   defp prepare_anthropic_tools_payload(nil), do: %{}
@@ -167,8 +173,8 @@ defmodule BeamMePrompty.LLM.Anthropic do
 
   defp get_content(%{
          "content" => content_list
-       }) do
-    results = Enum.map(content_list, &parse_content/1)
+       }, llm_params) do
+    results = Enum.map(content_list, &parse_content(&1, llm_params))
 
     {successes, errors} =
       Enum.reduce(results, {[], []}, fn
@@ -182,7 +188,7 @@ defmodule BeamMePrompty.LLM.Anthropic do
     end
   end
 
-  defp parse_content(%{"type" => "tool_use"} = content) do
+  defp parse_content(%{"type" => "tool_use"} = content, _llm_params) do
     {:ok,
      %FunctionCallPart{
        function_call: %{
@@ -193,21 +199,37 @@ defmodule BeamMePrompty.LLM.Anthropic do
      }}
   end
 
-  defp parse_content(%{"type" => "text"} = content) do
-    {:ok,
-     %TextPart{
-       text: content["text"]
-     }}
+  defp parse_content(%{"type" => "text"} = content, llm_params) do
+    text_content = content["text"]
+    
+    # Check if structured response is expected and try to parse as JSON
+    case llm_params[:structured_response] do
+      nil ->
+        {:ok, %TextPart{text: text_content}}
+      
+      _schema ->
+        case Jason.decode(text_content) do
+          {:ok, parsed_data} ->
+            {:ok, %DataPart{data: parsed_data}}
+          
+          {:error, json_error} ->
+            {:error,
+             UnexpectedLLMResponse.exception(
+               module: __MODULE__,
+               cause: "Failed to parse structured response as JSON: #{inspect(json_error)}. Response: #{text_content}"
+             )}
+        end
+    end
   end
 
-  defp parse_content(content) when is_binary(content) do
+  defp parse_content(content, _llm_params) when is_binary(content) do
     {:ok,
      %TextPart{
        text: content
      }}
   end
 
-  defp parse_content(unknown_part) do
+  defp parse_content(unknown_part, _llm_params) do
     {:error,
      UnexpectedLLMResponse.exception(
        module: __MODULE__,
@@ -321,6 +343,29 @@ defmodule BeamMePrompty.LLM.Anthropic do
       Map.put(output, :system, system_string)
     else
       output
+    end
+  end
+
+  defp enhance_system_prompt_for_structured_response(existing_system_prompt, nil), do: existing_system_prompt
+
+  defp enhance_system_prompt_for_structured_response(existing_system_prompt, schema) do
+    schema_json = 
+      schema
+      |> OpenApiSpex.OpenApi.to_map()
+      |> Jason.encode!(pretty: true)
+    
+    structured_instruction = """
+    
+    IMPORTANT: You must respond with valid JSON that matches this exact schema:
+    
+    #{schema_json}
+    
+    Your response should be ONLY the JSON object, with no additional text, explanations, or formatting.
+    """
+    
+    case existing_system_prompt do
+      nil -> String.trim(structured_instruction)
+      existing -> existing <> structured_instruction
     end
   end
 

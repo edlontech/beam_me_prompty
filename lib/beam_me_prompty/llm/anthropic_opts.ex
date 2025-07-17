@@ -72,6 +72,12 @@ defmodule BeamMePrompty.LLM.AnthropicOpts do
               keys: [
                 function_declarations: [required: true, type: {:list, :any}]
               ]
+            ],
+            structured_response: [
+              type: :map,
+              doc: """
+              OpenAPI 3.0 schema for the response, if filled, will enable the structured response feature
+              """
             ]
           )
 
@@ -97,6 +103,7 @@ defmodule BeamMePrompty.LLM.AnthropicOpts do
           api_key: api_key(config.api_key),
           thinking_budget: config.thinking_budget,
           tools: parse_dsl_tools(tools),
+          structured_response: config.structured_response,
           model: model
         ],
         fn {_, v} -> is_nil(v) end
