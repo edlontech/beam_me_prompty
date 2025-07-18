@@ -31,7 +31,7 @@ defmodule BeamMePrompty.Agent.Virtual do
   ## Architecture
 
   Virtual agents work by:
-  1. Taking a pre-loaded agent configuration (already queried by consumer)
+  1. Taking a pre-loaded agent configuration
   2. Deserializing the configuration into agent DSL structures
   3. Providing the same interface as regular agents (`stages/0`, `memory_sources/0`, `agent_config/0`)
   4. Using the standard executor infrastructure without modification

@@ -24,6 +24,9 @@ defmodule BeamMePrompty.Agent.Internals do
 
   require Logger
 
+  @typedoc """
+  Defines if hte agent is stateful or stateless.
+  """
   @type agent_type :: :stateful | :stateless
 
   # Simplified struct using the new component modules
@@ -64,6 +67,93 @@ defmodule BeamMePrompty.Agent.Internals do
 
   alias BeamMePrompty.DAG
 
+  @typedoc """
+  Represents the internal state of the agent execution engine.
+
+  This struct maintains the complete state for an agent's execution lifecycle,
+  including DAG management, stage coordination, and result collection.
+
+  ## Core Identifiers
+
+  - `agent_type` - Whether the agent is stateful or stateless
+  - `session_id` - Unique identifier for this execution session
+  - `agent_version` - Version string of the agent
+  - `agent_spec` - Complete agent specification and configuration
+
+  ## DAG and Execution Context
+
+  - `dag` - The directed acyclic graph defining stage dependencies
+  - `global_input` - Input data available to all stages
+  - `initial_state` - Initial agent state at startup
+  - `current_state` - Current agent state during execution
+  - `nodes_to_execute` - List of nodes prepared for execution
+  - `opts` - Additional execution options
+
+  ## Infrastructure
+
+  - `stage_workers` - Map of stage names to worker process PIDs
+  - `memory_manager` - PID of the memory manager process
+
+  ## Management Components
+
+  - `result_manager` - Manages execution results and completion status
+  - `batch_manager` - Handles batch execution of independent stages
+  - `progress_tracker` - Tracks execution progress and statistics
+  """
+  @type t :: %__MODULE__{
+          agent_type: agent_type(),
+          session_id: reference(),
+          agent_version: String.t(),
+          agent_spec: BeamMePrompty.Agent.AgentSpec.t(),
+          dag: DAG.dag(),
+          global_input: map(),
+          initial_state: map(),
+          current_state: map(),
+          nodes_to_execute: [{atom(), DAG.dag_node(), map()}],
+          opts: keyword(),
+          stage_workers: %{atom() => pid()},
+          memory_manager: pid(),
+          result_manager: ResultManager.t(),
+          batch_manager: BatchManager.t(),
+          progress_tracker: ProgressTracker.t()
+        }
+
+  @doc """
+  Initializes the agent execution engine.
+
+  This callback sets up the complete execution environment for an agent including
+  stage workers, memory management, and initial state preparation.
+
+  ## Parameters
+
+  - `{session_id, dag, input, initial_agent_state, opts, agent_spec}` - Initialization tuple with:
+    - `session_id` - Unique identifier for this execution session
+    - `dag` - The directed acyclic graph defining stage dependencies
+    - `input` - Global input data available to all stages
+    - `initial_agent_state` - Initial state for the agent
+    - `opts` - Additional execution options
+    - `agent_spec` - Complete agent specification and configuration
+
+  ## Returns
+
+  - `{:ok, :waiting_for_plan, data, actions}` - Successful initialization
+  - `{:error, reason}` - If initialization fails
+
+  ## Initialization Flow
+
+  1. Emits agent execution start telemetry
+  2. Calls agent initialization callback
+  3. Starts stage supervisor and memory manager
+  4. Creates worker processes for each stage
+  5. Initializes management components (result manager, batch manager, progress tracker)
+  6. Transitions to waiting_for_plan state
+
+  ## Complexity
+
+  - **Time**: O(n) where n is the number of stages in the DAG
+  - **Space**: O(n) for stage worker processes and management state
+
+  """
   @impl true
   def init({session_id, dag, input, initial_agent_state, opts, agent_spec}) do
     Telemetry.agent_execution_start(
@@ -75,7 +165,7 @@ defmodule BeamMePrompty.Agent.Internals do
     )
 
     Logger.debug(
-      "[BeamMePrompty] Agent [#{inspect(agent_spec)}](sid: #{inspect(session_id)}) initializing..."
+      "[BeamMePrompty] Agent [#{agent_spec.agent_config.name}](v: #{agent_spec.agent_config.version})(sid: #{inspect(session_id)}) initializing..."
     )
 
     {_init_status, current_agent_state} =
@@ -114,6 +204,39 @@ defmodule BeamMePrompty.Agent.Internals do
     end
   end
 
+  @doc """
+  Handles the planning phase of agent execution.
+
+  This state function determines which nodes are ready to execute based on
+  dependencies and agent planning logic, then transitions to execute those nodes.
+
+  ## Parameters
+
+  - `:internal` - Internal event type for state machine transitions
+  - `:plan` - Planning event trigger
+  - `data` - Current agent execution state
+
+  ## Returns
+
+  - `{:next_state, :completed, data}` - If all nodes are complete
+  - `{:next_state, :execute_nodes, data, actions}` - If nodes are ready to execute
+  - Error handling for planning failures
+
+  ## Planning Flow
+
+  1. Emits DAG planning start telemetry
+  2. Finds ready nodes based on DAG dependencies
+  3. Calls agent planning callback for custom logic
+  4. Determines effective ready nodes
+  5. Emits DAG planning stop telemetry
+  6. Transitions to appropriate next state
+
+  ## Complexity
+
+  - **Time**: O(n + m) where n is nodes and m is dependency edges
+  - **Space**: O(k) where k is the number of ready nodes
+
+  """
   def waiting_for_plan(:internal, :plan, data) do
     completed_count = ResultManager.completed_count(data.result_manager)
     total_count = map_size(data.dag.nodes)
@@ -172,6 +295,30 @@ defmodule BeamMePrompty.Agent.Internals do
 
   # Helper functions for waiting_for_plan state
 
+  # Starts stage worker processes for each node in the DAG.
+  #
+  # This function creates a worker process for each stage defined in the DAG,
+  # providing isolated execution environments for stage processing.
+  #
+  # ## Parameters
+  #
+  # - `supervisor_pid` - PID of the stages supervisor
+  # - `session_id` - Unique session identifier
+  # - `agent_spec` - Agent specification containing callback module
+  # - `dag_nodes` - Map of DAG nodes to create workers for
+  #
+  # ## Returns
+  #
+  # - `%{atom() => pid()}` - Map of node names to worker PIDs
+  #
+  # ## Complexity
+  #
+  # - **Time**: O(n) where n is the number of nodes
+  # - **Space**: O(n) for the worker process map
+  #
+  # ## Error Handling
+  #
+  # If a worker fails to start, delegates to ErrorHandler.handle_stage_worker_error/2
   defp start_stage_workers(supervisor_pid, session_id, agent_spec, dag_nodes) do
     Enum.into(dag_nodes, %{}, fn {node_name, _node_definition} ->
       case StagesSupervisor.start_stage_worker(
@@ -193,12 +340,49 @@ defmodule BeamMePrompty.Agent.Internals do
     end)
   end
 
+  # Checks if all nodes in the DAG have completed execution.
+  #
+  # ## Parameters
+  #
+  # - `data` - Current agent execution state
+  #
+  # ## Returns
+  #
+  # - `boolean()` - True if all nodes are complete
+  #
+  # ## Complexity
+  #
+  # - **Time**: O(1) - simple count comparison
+  # - **Space**: O(1) - no additional storage
   defp execution_complete?(data) do
     completed_count = ResultManager.completed_count(data.result_manager)
     total_count = map_size(data.dag.nodes)
     completed_count == total_count
   end
 
+  # Handles the completion of all agent execution.
+  #
+  # This function is called when all nodes in the DAG have completed execution.
+  # It calls the agent's completion callback and transitions to the appropriate final state.
+  #
+  # ## Parameters
+  #
+  # - `data` - Current agent execution state
+  #
+  # ## Returns
+  #
+  # - `{:next_state, :idle, data}` - For stateful agents
+  # - `{:next_state, :completed, data}` - For stateless agents
+  #
+  # ## State Transition Logic
+  #
+  # - Stateful agents transition to idle state for potential future messages
+  # - Stateless agents transition to completed state as final state
+  #
+  # ## Complexity
+  #
+  # - **Time**: O(1) - simple state transition
+  # - **Space**: O(1) - no additional storage
   defp handle_execution_completion(data) do
     current_results = ResultManager.get_all_results(data.result_manager)
 
@@ -218,6 +402,34 @@ defmodule BeamMePrompty.Agent.Internals do
     end
   end
 
+  # Prepares nodes for execution by creating execution contexts.
+  #
+  # This function takes ready nodes and creates execution contexts containing
+  # all necessary information for stage execution including dependencies, input,
+  # and current state.
+  #
+  # ## Parameters
+  #
+  # - `data` - Current agent execution state
+  # - `effective_ready_nodes` - List of node names ready for execution
+  #
+  # ## Returns
+  #
+  # - `{:next_state, :execute_nodes, updated_data, actions}` - Transition to execution
+  #
+  # ## Context Creation
+  #
+  # Each node context includes:
+  # - Initial state merged with dependency results
+  # - Global input data
+  # - Agent specification
+  # - Current agent state
+  # - Memory manager reference
+  #
+  # ## Complexity
+  #
+  # - **Time**: O(n) where n is the number of ready nodes
+  # - **Space**: O(n * m) where m is the average context size
   defp prepare_node_execution(data, effective_ready_nodes) do
     current_results = ResultManager.get_all_results(data.result_manager)
 
@@ -350,6 +562,37 @@ defmodule BeamMePrompty.Agent.Internals do
     {:keep_state, data}
   end
 
+  @doc """
+  Executes prepared nodes in the current batch.
+
+  This state function handles the actual execution of nodes by dispatching
+  them to stage workers and managing the batch execution lifecycle.
+
+  ## Parameters
+
+  - `:internal` - Internal event type for state machine transitions
+  - `:execute` - Execution event trigger
+  - `data` - Current agent execution state with nodes_to_execute
+
+  ## Returns
+
+  - `{:next_state, :waiting_for_plan, data, actions}` - If no nodes to execute
+  - `{:next_state, :awaiting_stage_results, data}` - If nodes are dispatched
+
+  ## Execution Flow
+
+  1. Checks if there are nodes to execute
+  2. Calls batch start callback
+  3. Prepares batch with updated agent state
+  4. Dispatches nodes to stage workers
+  5. Transitions to await results
+
+  ## Complexity
+
+  - **Time**: O(n) where n is the number of nodes to execute
+  - **Space**: O(n) for batch preparation and dispatch
+
+  """
   def execute_nodes(:internal, :execute, data) do
     if Enum.empty?(data.nodes_to_execute) do
       {:next_state, :waiting_for_plan, data, [{:next_event, :internal, :plan}]}
@@ -377,6 +620,48 @@ defmodule BeamMePrompty.Agent.Internals do
     end
   end
 
+  @doc """
+  Handles various events while awaiting stage execution results.
+
+  This state function processes different types of responses and events during
+  stage execution, including successful completions, errors, and external requests.
+
+  ## Event Types
+
+  ### Stage Success Responses
+  - `{:stage_response, node_name, {:ok, stage_result}, agent_state_from_stage}` - Success with state update
+  - `{:stage_response, node_name, {:ok, stage_result}}` - Success without state update
+
+  ### Stage Error Responses
+  - `{:stage_response, node_name, {:error, reason_of_error}, agent_state_from_stage}` - Error with state update
+  - `{:stage_response, node_name, {:error, reason_of_error}}` - Error without state update
+
+  ### External Requests
+  - `{:call, from}, :get_results` - Returns current execution status
+  - `{:call, from}, {:message, message}` - Rejects new messages during execution
+
+  ### Unexpected Events
+  - Any other event type is handled by the error handler
+
+  ## Parameters
+
+  - `event_type` - Type of event (`:info`, `{:call, from}`, etc.)
+  - `event_content` - Content of the event
+  - `data` - Current agent execution state
+
+  ## Returns
+
+  - Various state transitions based on event type
+  - Error handling for unexpected events
+
+  ## Processing Flow
+
+  1. Stage success: Updates batch manager and calls completion callbacks
+  2. Stage errors: Delegates to error handler for appropriate response
+  3. External requests: Provides status or rejects based on current state
+  4. Unexpected events: Delegates to error handler
+
+  """
   def awaiting_stage_results(
         :info,
         {:stage_response, node_name, {:ok, stage_result}, agent_state_from_stage},
@@ -414,6 +699,44 @@ defmodule BeamMePrompty.Agent.Internals do
     ErrorHandler.handle_unexpected_event(:awaiting_stage_results, event_type, event_content, data)
   end
 
+  @doc """
+  Handles events while in idle state.
+
+  This state function processes different types of events when the agent
+  is in idle state, typically after completing execution for stateful agents.
+
+  ## Event Types
+
+  ### Result Requests
+  - `{:call, from}, :get_results` - Returns current execution results
+
+  ### New Messages
+  - `{:call, from}, {:message, message}` - Processes new messages for stateful agents
+
+  ### Unexpected Events
+  - Any other event type is handled by the error handler
+
+  ## Parameters
+
+  - `event_type` - Type of event (`{:call, from}`, etc.)
+  - `event_content` - Content of the event
+  - `data` - Current agent execution state
+
+  ## Returns
+
+  - `{:keep_state, data, reply}` - For result requests
+  - `{:next_state, :waiting_for_plan, data, actions}` - For new messages
+  - `{:keep_state, data}` - For unexpected events
+
+  ## Message Processing Flow
+
+  For new messages:
+  1. Finds entry point stage for message routing
+  2. Updates entry point stage with new message
+  3. Archives current results and resets management components
+  4. Transitions to planning state for new execution cycle
+
+  """
   def idle({:call, from}, :get_results, data) do
     current_results = ResultManager.get_all_results(data.result_manager)
     {:keep_state, data, [{:reply, from, {:ok, :idle, current_results}}]}
@@ -452,6 +775,38 @@ defmodule BeamMePrompty.Agent.Internals do
     {:keep_state, data}
   end
 
+  @doc """
+  Handles events while in completed state.
+
+  This state function processes events when the agent has completed execution
+  for stateless agents. The agent will not process new messages in this state.
+
+  ## Event Types
+
+  ### Result Requests
+  - `{:call, from}, :get_results` - Returns final execution results
+  - `{:call, from}, {:get_node_result, node_name}` - Returns result for specific node
+
+  ### Unexpected Events
+  - Any other event type is handled by the error handler
+
+  ## Parameters
+
+  - `event_type` - Type of event (`{:call, from}`, etc.)
+  - `event_content` - Content of the event
+  - `data` - Current agent execution state
+
+  ## Returns
+
+  - `{:keep_state, data, reply}` - For result requests
+  - `{:keep_state, data}` - For unexpected events
+
+  ## Final State
+
+  The completed state is terminal for stateless agents. No further
+  execution or message processing occurs.
+
+  """
   def completed({:call, from}, :get_results, data) do
     current_results = ResultManager.get_all_results(data.result_manager)
     {:keep_state, data, [{:reply, from, {:ok, :completed, current_results}}]}
@@ -476,6 +831,28 @@ defmodule BeamMePrompty.Agent.Internals do
     {:keep_state, data}
   end
 
+  @doc """
+  Handles agent process termination.
+
+  This callback is invoked when the agent process terminates. It emits
+  termination telemetry and performs cleanup operations.
+
+  ## Parameters
+
+  - `reason` - The termination reason
+  - `_state_name` - Current state when terminating (ignored)
+  - `data` - Current agent execution state
+
+  ## Returns
+
+  - `:ok` - Successful termination
+
+  ## Cleanup Operations
+
+  - Emits agent execution stop telemetry
+  - Provides termination reason and result manager state
+
+  """
   @impl true
   def terminate(reason, _state_name, data) do
     Telemetry.agent_execution_stop(
@@ -488,6 +865,29 @@ defmodule BeamMePrompty.Agent.Internals do
     :ok
   end
 
+  # Finds the entry point stage for message routing.
+  #
+  # This function identifies which stage should receive new messages,
+  # preferring stages marked as entry points or falling back to the first stage.
+  #
+  # ## Parameters
+  #
+  # - `nodes` - Map of DAG nodes
+  #
+  # ## Returns
+  #
+  # - `atom()` - Name of the entry point stage
+  # - `nil` - If no stages are available
+  #
+  # ## Selection Logic
+  #
+  # 1. Looks for stages with `entry_point: true` in their definition
+  # 2. Falls back to the first stage in the nodes map
+  #
+  # ## Complexity
+  #
+  # - **Time**: O(n) where n is the number of nodes
+  # - **Space**: O(1) - no additional storage
   defp find_entry_point_stage(nodes) do
     entry_point =
       Enum.find(nodes, fn {_name, node_def} ->
@@ -503,6 +903,30 @@ defmodule BeamMePrompty.Agent.Internals do
     end
   end
 
+  # Starts the memory manager with configured memory sources.
+  #
+  # This function initializes the memory management system with the specified
+  # memory sources, transforming the source configurations into the format
+  # expected by the memory manager.
+  #
+  # ## Parameters
+  #
+  # - `memory_sources` - List of memory source configurations
+  #
+  # ## Returns
+  #
+  # - `{:ok, pid()}` - Successfully started memory manager
+  # - `{:error, reason}` - If memory manager fails to start
+  #
+  # ## Source Transformation
+  #
+  # Converts source configurations from `%{name: name, module: module, opts: opts}`
+  # to `{name, {module, opts}}` tuples for the memory manager.
+  #
+  # ## Complexity
+  #
+  # - **Time**: O(n) where n is the number of memory sources
+  # - **Space**: O(n) for the transformed source list
   defp start_memory_manager(memory_sources) do
     memory_sources =
       Enum.map(memory_sources, fn source ->

@@ -82,6 +82,9 @@ defmodule BeamMePrompty.LLM.GoogleGeminiOpts do
   alias BeamMePrompty.LLM.Errors.InvalidConfig
   alias BeamMePrompty.Tool
 
+  @doc """
+  Validates the configuration options for the Google Gemini LLM adapter.
+  """
   @spec validate(String.t(), [Tool.t()], LLMParams.t()) ::
           {:ok, t()} | {:error, Splode.Error.t()}
   def validate(model, tools, config) do

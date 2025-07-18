@@ -3,6 +3,7 @@ defmodule BeamMePrompty.Migrations.Postgres.V01 do
 
   use Ecto.Migration
 
+  @doc false
   def up(%{create_schema: create?, prefix: prefix} = opts) do
     %{escaped_prefix: _escaped, quoted_prefix: quoted} = opts
 
@@ -23,6 +24,7 @@ defmodule BeamMePrompty.Migrations.Postgres.V01 do
     create index(:bmp_agents, [:agent_name], prefix: prefix)
   end
 
+  @doc false
   def down(%{prefix: prefix, quoted_prefix: _quoted}) do
     drop table(:bmp_agents, prefix: prefix)
   end

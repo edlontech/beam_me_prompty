@@ -40,11 +40,83 @@ defmodule BeamMePrompty.Agent.Stage do
     :current_agent_state
   ]
 
-  @doc false
+  @typedoc """
+  Represents the internal state of a stage process.
+
+  This struct maintains the state for a single stage within an agent's execution DAG,
+  including the stage configuration, message history, and current execution context.
+
+  ## Fields
+
+  - `stage_name` - The name of the stage (atom or string)
+  - `session_id` - Unique identifier for the agent session
+  - `messages` - List of messages in the conversation history
+  - `tool_responses` - List of tool execution responses
+  - `agent_module` - The agent module this stage belongs to
+  - `current_agent_state` - Current state of the agent including memory manager
+  """
+  @type t() :: %__MODULE__{
+          stage_name: atom | String.t(),
+          session_id: reference(),
+          messages: list(),
+          tool_responses: list(),
+          agent_module: module,
+          current_agent_state: map()
+        }
+
+  @doc """
+  Starts a new stage GenStateMachine process.
+
+  This function creates a new stage process that can handle the execution of a single
+  stage within an agent's DAG. The stage process manages LLM interactions, tool calls,
+  and message history for its assigned stage.
+
+  ## Parameters
+
+  - `stage` - A tuple containing `{stage_name, session_id, agent_module}`
+
+  ## Returns
+
+  - `{:ok, pid}` - The started GenStateMachine process
+  - `{:error, reason}` - If the process fails to start
+
+  ## Examples
+
+      BeamMePrompty.Agent.Stage.start_link({
+        :user_input_stage,
+        session_ref,
+        MyAgent
+      })
+
+  """
+  @spec start_link({atom() | String.t(), reference(), module()}) :: GenStateMachine.on_start()
   def start_link(stage) do
     GenStateMachine.start_link(__MODULE__, stage, [])
   end
 
+  @doc """
+  Initializes the stage GenStateMachine.
+
+  This callback is invoked when the stage process starts. It sets up the initial
+  state with the stage name, session ID, agent module, and empty message history.
+
+  ## Parameters
+
+  - `{stage_name, session_id, agent_module}` - Initialization tuple containing:
+    - `stage_name` - The name of the stage (atom or string)
+    - `session_id` - Unique session identifier
+    - `agent_module` - The agent module this stage belongs to
+
+  ## Returns
+
+  - `{:ok, :idle, initial_data}` - Initial state with stage data
+
+  ## State Machine Flow
+
+  The stage starts in the `:idle` state and transitions to `:executing_llm` when
+  processing execution requests.
+
+  """
   @impl true
   def init({stage_name, session_id, agent_module}) do
     actual_stage_name =
@@ -65,6 +137,34 @@ defmodule BeamMePrompty.Agent.Stage do
     {:ok, :idle, initial_data}
   end
 
+  @doc """
+  Handles stage execution requests in the idle state.
+
+  This state function processes incoming execution requests by setting up the
+  execution context, calling stage start callbacks, and transitioning to the
+  executing state.
+
+  ## Parameters
+
+  - `:cast` - Event type for asynchronous messages
+  - `{:execute, node_name, node_def, node_ctx, caller_pid}` - Execution request with:
+    - `node_name` - The DAG node name being executed
+    - `node_def` - The stage definition containing LLM configuration
+    - `node_ctx` - Execution context including global input and dependencies
+    - `caller_pid` - Process ID to send results back to
+  - `data` - Current stage state data
+
+  ## Returns
+
+  - `{:next_state, :executing_llm, updated_data, next_event}` - Transitions to executing state
+
+  ## Side Effects
+
+  - Emits stage execution start telemetry
+  - Calls stage start callbacks
+  - Updates agent state with memory manager
+
+  """
   def idle(:cast, {:execute, node_name, node_def, node_ctx, caller_pid}, data) do
     Telemetry.stage_execution_start(
       data.agent_module,
@@ -75,9 +175,10 @@ defmodule BeamMePrompty.Agent.Stage do
 
     agent_module_from_ctx = node_ctx[:agent_module]
     agent_state_from_ctx = node_ctx[:current_agent_state]
+    agent_spec = node_ctx[:agent_spec]
 
     Logger.debug(
-      "[BeamMePrompty] Agent [#{inspect(data.agent_module)}](sid: #{inspect(data.session_id)}) running node [#{inspect(node_name)}]"
+      "[BeamMePrompty] Agent [#{agent_spec.agent_config.name}](v: #{agent_spec.agent_config.version})(sid: #{inspect(data.session_id)}) running node [#{inspect(node_name)}]"
     )
 
     # Ensure memory_manager is in the agent state
@@ -116,6 +217,30 @@ defmodule BeamMePrompty.Agent.Stage do
 
   # --- :executing_llm State ---
 
+  @doc """
+  Handles LLM execution in the executing state.
+
+  This state function processes the actual stage execution by calling the LLM,
+  handling the results, and sending responses back to the caller.
+
+  ## Parameters
+
+  - `:internal` - Internal event type for state machine transitions
+  - `{:execute, {node_name, node_def, node_ctx, caller_pid}}` - Execution parameters
+  - `data` - Current stage state data
+
+  ## Returns
+
+  - `{:next_state, :idle, final_stage_data}` - Returns to idle state after execution
+
+  ## Execution Flow
+
+  1. Executes the stage using `do_execute_stage/3`
+  2. Formats the result as `{:ok, result}` or `{:error, error}`
+  3. Emits stage execution stop telemetry
+  4. Sends the result to the caller process
+  5. Transitions back to idle state
+  """
   def executing_llm(
         :internal,
         {:execute, {node_name, node_def, node_ctx, caller_pid}},
@@ -151,14 +276,55 @@ defmodule BeamMePrompty.Agent.Stage do
     {:keep_state_and_data, :postpone}
   end
 
+  @doc """
+  Handles stage process termination.
+
+  This callback is invoked when the stage process terminates. It provides a place
+  for cleanup operations, though currently no special cleanup is needed.
+
+  ## Parameters
+
+  - `_reason` - The termination reason (ignored)
+  - `_state` - The current state when terminating (ignored)
+  - `_data` - The current stage data when terminating (ignored)
+
+  ## Returns
+
+  - `:ok` - Successful termination
+  """
   @impl true
   def terminate(_reason, _state, _data) do
     :ok
   end
 
+  # Executes the actual stage processing including LLM calls and result handling.
+  #
+  # This function coordinates the stage execution by:
+  # 1. Preparing input data by merging global input with dependency results
+  # 2. Calling the LLM processor to handle the LLM interaction
+  # 3. Processing the results and updating stage state
+  #
+  # ## Parameters
+  #
+  # - `stage_node_def` - The stage definition containing LLM configuration
+  # - `exec_context` - Execution context with global input and dependency results
+  # - `stage_data` - Current stage state data
+  #
+  # ## Returns
+  #
+  # - `{:ok, result, updated_stage_data}` - Successful execution
+  # - `{:error, error_class, updated_stage_data}` - Failed execution
+  #
+  # ## Data Flow
+  #
+  # The function merges global input with dependency results to provide complete
+  # context to the LLM, then processes the response and updates the stage state.
   defp do_execute_stage(stage_node_def, exec_context, stage_data) do
+    # Get agent_spec from execution context for better logging
+    agent_spec = exec_context[:agent_spec]
+
     Logger.debug("""
-    [BeamMePrompty] Agent [#{inspect(stage_data.agent_module)}](sid: #{inspect(stage_data.session_id)}) Stage [#{inspect(stage_data.stage_name)}] executing.
+    [BeamMePrompty] Agent [#{agent_spec.agent_config.name}](v: #{agent_spec.agent_config.version})(sid: #{inspect(stage_data.session_id)}) Stage [#{inspect(stage_data.stage_name)}] executing.
     """)
 
     global_input = exec_context[:global_input] || %{}
@@ -176,7 +342,7 @@ defmodule BeamMePrompty.Agent.Stage do
          ) do
       {:ok, llm_result, updated_messages_history, final_agent_state_after_llm} ->
         Logger.debug("""
-        [BeamMePrompty] Agent [#{inspect(stage_data.agent_module)}](sid: #{inspect(stage_data.session_id)}) Stage [#{inspect(stage_data.stage_name)}] finished.
+        [BeamMePrompty] Agent [#{agent_spec.agent_config.name}](v: #{agent_spec.agent_config.version})(sid: #{inspect(stage_data.session_id)}) Stage [#{inspect(stage_data.stage_name)}] finished.
         """)
 
         updated_stage_data = %{

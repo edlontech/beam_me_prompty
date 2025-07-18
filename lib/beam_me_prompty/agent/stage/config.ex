@@ -19,6 +19,19 @@ defmodule BeamMePrompty.Agent.Stage.Config do
 
   alias BeamMePrompty.LLM.Errors
 
+  @typedoc """
+  max_tool_iterations: Maximum number of iterations allowed for tool calling.
+  enable_tool_calling: Whether tool calling is enabled.
+  structured_response_validation: Whether to validate structured responses.
+  message_history_limit: Maximum number of messages to keep in history.
+  """
+  @type t() :: %__MODULE__{
+          max_tool_iterations: non_neg_integer(),
+          enable_tool_calling: boolean(),
+          structured_response_validation: boolean(),
+          message_history_limit: non_neg_integer()
+        }
+
   @doc """
   Returns the default configuration for stage execution.
   """

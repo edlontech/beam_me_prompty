@@ -29,6 +29,9 @@ defmodule BeamMePrompty.MixProject do
         main: "readme",
         extras: [
           "README.md": [title: "Introduction"],
+          "pages/creating_agents.md": [title: "Creating Agents"],
+          "pages/implementing_tools.md": [title: "Implemening Tools"],
+          "pages/implementing_memory_backends.md": [title: "Implementing Memory Backends"],
           "LICENSE.md": [title: "License"]
         ],
         groups_for_modules: [
@@ -66,6 +69,7 @@ defmodule BeamMePrompty.MixProject do
     [
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:doctor, "~> 0.22", only: [:dev]},
       {:ecto, "~> 3.13"},
       {:ecto_sql, "~> 3.13"},
       {:ex_check, "~> 0.16", only: [:dev, :test], runtime: false},

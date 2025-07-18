@@ -10,6 +10,9 @@ defmodule BeamMePrompty.Agent.Serialization.Deserializer do
   alias BeamMePrompty.Agent.Dsl
   alias BeamMePrompty.Errors.DeserializationError
 
+  @doc """
+  Deserializes a JSON string into an `AgentSpec` struct.
+  """
   @spec deserialize(binary()) :: {:ok, AgentSpec.t()} | {:error, term()}
   def deserialize(json_string) when is_binary(json_string) do
     with {:ok, raw_data} <- Jason.decode(json_string),

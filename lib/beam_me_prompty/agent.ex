@@ -184,7 +184,34 @@ defmodule BeamMePrompty.Agent do
             session_id: reference()
           )
 
-  @doc false
+  @doc """
+  Handles code injection before compilation.
+
+  This function is called by the `use BeamMePrompty.Agent` macro to inject
+  the necessary functions and modules into the agent module. It sets up
+  the agent's lifecycle functions, executor integration, and DSL access.
+
+  ## Parameters
+
+  - `_keyword` - Compilation options (unused)
+
+  ## Returns
+
+  A quoted expression containing the injected code.
+
+  ## Injected Functions
+
+  This function injects the following functions into agent modules:
+  - `child_spec/1` - Supervisor child specification
+  - `start_link/1` - Process startup function
+  - `run_sync/4` - Synchronous execution function
+  - `stages/0` - Stage configuration accessor
+  - `memory_sources/0` - Memory source configuration accessor
+  - `agent_config/0` - Agent configuration accessor
+  - `to_spec/0` - Agent specification converter
+
+  """
+  @spec handle_before_compile(keyword()) :: Macro.t()
   def handle_before_compile(_keyword) do
     quote do
       use BeamMePrompty.Agent.Executor
@@ -193,7 +220,29 @@ defmodule BeamMePrompty.Agent do
       alias BeamMePrompty.Agent.Dsl
       alias BeamMePrompty.Agent.Executor
 
-      @doc false
+      @doc """
+      Returns a child specification for supervision trees.
+
+      Generates a child specification that can be used by supervisors to
+      start and manage agent processes. Each agent instance is identified
+      by a unique session ID.
+
+      ## Parameters
+
+      - `start_opts` - Keyword list of startup options (see `agent_opts/0` type)
+
+      ## Returns
+
+      A child specification map compatible with Supervisor.
+
+      ## Examples
+
+          # Used automatically by supervisors
+          children = [
+            {MyAgent, [input: %{name: "Alice"}, session_id: make_ref()]}
+          ]
+
+      """
       def child_spec(start_opts \\ []) do
         start_opts = Keyword.put_new(start_opts, :session_id, make_ref())
 
@@ -204,7 +253,34 @@ defmodule BeamMePrompty.Agent do
         }
       end
 
-      @doc false
+      @doc """
+      Starts an agent process linked to the current process.
+
+      Creates a new agent process that executes the defined stages asynchronously.
+      The agent process will be linked to the calling process and can be supervised.
+
+      ## Parameters
+
+      - `start_opts` - Keyword list of startup options (see `agent_opts/0` type)
+
+      ## Returns
+
+      - `{:ok, pid()}` - The agent process PID on successful start
+      - `{:error, term()}` - Error details if the agent fails to start
+
+      ## Examples
+
+          # Start an agent with input data
+          {:ok, pid} = MyAgent.start_link([
+            input: %{name: "Alice", topic: "AI"},
+            initial_state: %{},
+            session_id: make_ref()
+          ])
+
+          # Monitor the agent process
+          Process.monitor(pid)
+
+      """
       def start_link(start_opts \\ []) do
         input = Keyword.get(start_opts, :input, %{})
         initial_state = Keyword.get(start_opts, :initial_state, %{})
@@ -241,18 +317,88 @@ defmodule BeamMePrompty.Agent do
         Executor.execute(agent_spec, input, initial_state, opts, timeout)
       end
 
+      @doc """
+      Returns the list of stages defined in this agent.
+
+      Retrieves all stages configured in the agent DSL, including their
+      dependencies, LLM configurations, and tool definitions.
+
+      ## Returns
+
+      A list of stage configurations from the agent DSL.
+
+      ## Examples
+
+          MyAgent.stages()
+          #=> [%{name: :greet, depends_on: [], llm: ...}, ...]
+
+      """
+      @spec stages() :: list(map())
       def stages do
         Dsl.Info.agent(__MODULE__)
       end
 
+      @doc """
+      Returns the memory sources configured for this agent.
+
+      Retrieves all memory sources defined in the agent DSL, including their
+      configurations, descriptions, and options.
+
+      ## Returns
+
+      A list of memory source configurations from the agent DSL.
+
+      ## Examples
+
+          MyAgent.memory_sources()
+          #=> [%{name: :short_term_cache, module: BeamMePrompty.Agent.Memory.ETS, ...}]
+
+      """
+      @spec memory_sources() :: list(map())
       def memory_sources do
         Dsl.Info.memory(__MODULE__)
       end
 
+      @doc """
+      Returns the agent configuration options.
+
+      Retrieves global agent configuration such as state management mode,
+      version, and other agent-level settings from the DSL.
+
+      ## Returns
+
+      A map containing agent configuration options.
+
+      ## Examples
+
+          MyAgent.agent_config()
+          #=> %{agent_state: :stateful, version: "1.0.0"}
+
+      """
+      @spec agent_config() :: map()
       def agent_config do
         Dsl.Info.agent_options(__MODULE__)
       end
 
+      @doc """
+      Converts the agent DSL configuration to an AgentSpec struct.
+
+      Transforms the agent's DSL configuration into a structured AgentSpec
+      that can be used by the Executor for agent execution. This includes
+      all stages, memory sources, and configuration options.
+
+      ## Returns
+
+      - `{:ok, AgentSpec.t()}` - The agent specification struct on success
+      - `{:error, term()}` - Error details if conversion fails
+
+      ## Examples
+
+          {:ok, spec} = MyAgent.to_spec()
+          #=> {:ok, %BeamMePrompty.Agent.AgentSpec{...}}
+
+      """
+      @spec to_spec() :: {:ok, BeamMePrompty.Agent.AgentSpec.t()} | {:error, term()}
       def to_spec do
         AgentSpec.from_map(
           %{

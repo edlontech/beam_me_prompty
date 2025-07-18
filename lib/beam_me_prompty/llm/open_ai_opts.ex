@@ -82,6 +82,9 @@ defmodule BeamMePrompty.LLM.OpenAIOpts do
   alias BeamMePrompty.LLM.Errors.InvalidConfig
   alias BeamMePrompty.Tool
 
+  @doc """
+  Validates the configuration for the OpenAI LLM adapter.
+  """
   @spec validate(String.t(), [Tool.t()], LLMParams.t()) ::
           {:ok, t()} | {:error, Splode.Error.t()}
   def validate(model, tools, config) do
