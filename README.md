@@ -32,55 +32,18 @@ def deps do
 end
 ```
 
-## 🤖 LLM Integrations
-
-BeamMePrompty provides seamless integration with multiple LLM providers through a unified interface.
-
-### Direct LLM Usage
-
-Use `BeamMePrompty.LLM.completion/5` for direct LLM calls:
+Create a new migration file to create the necessary database tables:
 
 ```elixir
-alias BeamMePrompty.LLM
-alias BeamMePrompty.Agent.Dsl.TextPart
+  use Ecto.Migration
 
-# Simple text completion
-messages = [user: [%TextPart{text: "Tell me a joke about programming"}]]
-{:ok, response} = LLM.completion(
-  BeamMePrompty.LLM.GoogleGemini,
-  "gemini-pro",
-  messages,
-  [],  # No tools
-  [
-    key: "YOUR_API_KEY",
-    max_output_tokens: 150,
-    temperature: 0.7
-  ]
-)
-
-IO.puts(response.content)
-```
-
-### Custom LLM Clients
-
-Implement the `BeamMePrompty.LLM` behaviour for custom providers:
-
-```elixir
-defmodule MyApp.LLM.CustomProvider do
-  @behaviour BeamMePrompty.LLM
-  
-  @impl true
-  def completion(model, messages, tools, opts) do
-    # Custom implementation
-    with {:ok, formatted_messages} <- format_messages(messages),
-         {:ok, response} <- call_api(model, formatted_messages, tools, opts),
-         {:ok, parsed} <- parse_response(response) do
-      {:ok, parsed}
-    end
+  def up do
+    BeamMePrompty.Migrations.up()
   end
-  
-  # Implementation details...
-end
+
+  def down do
+    BeamMePrompty.Migrations.down()
+  end
 ```
 
 ## 🤝 Contributing
