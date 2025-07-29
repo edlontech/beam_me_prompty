@@ -147,11 +147,32 @@ defmodule BeamMePrompty.LLM.Anthropic do
 
   @impl true
   def available_models(opts \\ []) do
-    with {:ok, api_key} <- get_api_key(opts),
-         {:ok, response} <- call_models_api(api_key, opts) do
-      {:ok, extract_model_ids(response)}
-    else
-      {:error, error} -> {:error, Errors.to_class(error)}
+    case get_api_key(opts) do
+      {:ok, api_key} ->
+        fetch_all_models(api_key, nil, [], opts)
+
+      {:error, error} ->
+        {:error, Errors.to_class(error)}
+    end
+  end
+
+  defp fetch_all_models(api_key, after_id, accumulated_models, opts) do
+    case call_models_api(api_key, after_id, opts) do
+      {:ok, response} ->
+        models = extract_model_ids(response)
+        all_models = accumulated_models ++ models
+
+        case Map.get(response, "has_more", false) do
+          true ->
+            last_id = Map.get(response, "last_id")
+            fetch_all_models(api_key, last_id, all_models, opts)
+
+          false ->
+            {:ok, all_models}
+        end
+
+      {:error, error} ->
+        {:error, error}
     end
   end
 
@@ -426,8 +447,11 @@ defmodule BeamMePrompty.LLM.Anthropic do
     end
   end
 
-  defp call_models_api(api_key, opts) do
+  defp call_models_api(api_key, after_id, opts) do
     version = Keyword.get(opts, :version, "2023-06-01")
+
+    params = [limit: 50]
+    params = if after_id, do: Keyword.put(params, :after_id, after_id), else: params
 
     client =
       Req.new(
@@ -436,6 +460,7 @@ defmodule BeamMePrompty.LLM.Anthropic do
           :"x-api-key" => api_key,
           :"anthropic-version" => version
         },
+        params: params,
         plug:
           case opts[:http_adapter] do
             nil -> nil

@@ -144,20 +144,39 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
       {:error,
        InvalidRequest.exception(module: __MODULE__, cause: "Google Gemini API key not configured")}
     else
-      Req.new(
-        base_url: "https://generativelanguage.googleapis.com/v1beta",
-        params: [key: api_key]
-      )
-      |> Req.get(url: "/models")
-      |> parse_models_response()
+      fetch_all_models(api_key, nil, [])
     end
   end
 
-  defp parse_models_response({:ok, %Req.Response{status: 200, body: body}}) do
+  defp fetch_all_models(api_key, page_token, accumulated_models) do
+    params = [key: api_key, pageSize: 100]
+    params = if page_token, do: Keyword.put(params, :pageToken, page_token), else: params
+
+    Req.new(
+      base_url: "https://generativelanguage.googleapis.com/v1beta",
+      params: params
+    )
+    |> Req.get(url: "/models")
+    |> parse_models_response(accumulated_models, api_key)
+  end
+
+  defp parse_models_response(
+         {:ok, %Req.Response{status: 200, body: body}},
+         accumulated_models,
+         api_key
+       ) do
     case body do
       %{"models" => models_json} when is_list(models_json) ->
         model_names = Enum.map(models_json, fn %{"name" => name} -> name end)
-        {:ok, model_names}
+        all_models = accumulated_models ++ model_names
+
+        case Map.get(body, "nextPageToken") do
+          nil ->
+            {:ok, all_models}
+
+          next_token ->
+            fetch_all_models(api_key, next_token, all_models)
+        end
 
       _ ->
         {:error,
@@ -168,17 +187,25 @@ defmodule BeamMePrompty.LLM.GoogleGemini do
     end
   end
 
-  defp parse_models_response({:ok, %Req.Response{status: status, body: body}})
+  defp parse_models_response(
+         {:ok, %Req.Response{status: status, body: body}},
+         _accumulated_models,
+         _api_key
+       )
        when status in 400..499,
        do: {:error, InvalidRequest.exception(module: __MODULE__, cause: body)}
 
-  defp parse_models_response({:ok, %Req.Response{status: status, body: body}})
+  defp parse_models_response(
+         {:ok, %Req.Response{status: status, body: body}},
+         _accumulated_models,
+         _api_key
+       )
        when status in 500..599,
        do:
          {:error,
           UnexpectedLLMResponse.exception(module: __MODULE__, status: status, cause: body)}
 
-  defp parse_models_response({:error, err}),
+  defp parse_models_response({:error, err}, _accumulated_models, _api_key),
     do: {:error, UnexpectedLLMResponse.exception(module: __MODULE__, cause: err)}
 
   defp call_api(messages, llm_params, opts) do
