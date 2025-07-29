@@ -136,6 +136,59 @@ defmodule BeamMePrompty.LLM.OpenAI do
     end
   end
 
+  @impl true
+  def available_models(opts \\ []) do
+    case fetch_models(opts) do
+      {:ok, models} -> {:ok, models}
+      {:error, error} -> {:error, Errors.to_class(error)}
+    end
+  end
+
+  defp fetch_models(opts) do
+    api_key = opts[:api_key] || Application.get_env(:beam_me_prompty, :openai_api_key)
+
+    if is_nil(api_key) do
+      {:error,
+       InvalidRequest.exception(module: __MODULE__, cause: "OpenAI API key not configured")}
+    else
+      Req.new(
+        base_url: "https://api.openai.com/v1",
+        auth: {:bearer, api_key},
+        headers: [{"content-type", "application/json"}]
+      )
+      |> Req.get(url: "/models")
+      |> parse_models_response()
+    end
+  end
+
+  defp parse_models_response({:ok, %Req.Response{status: 200, body: body}}) do
+    case body do
+      %{"data" => models_json} when is_list(models_json) ->
+        model_ids = Enum.map(models_json, fn %{"id" => id} -> id end)
+        {:ok, model_ids}
+
+      _ ->
+        {:error,
+         UnexpectedLLMResponse.exception(
+           module: __MODULE__,
+           cause: "Invalid models list response format"
+         )}
+    end
+  end
+
+  defp parse_models_response({:ok, %Req.Response{status: status, body: body}})
+       when status in 400..499,
+       do: {:error, InvalidRequest.exception(module: __MODULE__, cause: body)}
+
+  defp parse_models_response({:ok, %Req.Response{status: status, body: body}})
+       when status in 500..599,
+       do:
+         {:error,
+          UnexpectedLLMResponse.exception(module: __MODULE__, status: status, cause: body)}
+
+  defp parse_models_response({:error, err}),
+    do: {:error, UnexpectedLLMResponse.exception(module: __MODULE__, cause: err)}
+
   defp call_api(messages, llm_params, opts) do
     payload =
       Map.reject(

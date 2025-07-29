@@ -145,6 +145,16 @@ defmodule BeamMePrompty.LLM.Anthropic do
     |> parse_response(llm_params)
   end
 
+  @impl true
+  def available_models(opts \\ []) do
+    with {:ok, api_key} <- get_api_key(opts),
+         {:ok, response} <- call_models_api(api_key, opts) do
+      {:ok, extract_model_ids(response)}
+    else
+      {:error, error} -> {:error, Errors.to_class(error)}
+    end
+  end
+
   defp parse_response({:ok, %Req.Response{status: 200, body: body}}, llm_params),
     do: get_content(body, llm_params)
 
@@ -393,5 +403,73 @@ defmodule BeamMePrompty.LLM.Anthropic do
     else
       [%{role: role, content: formatted_api_content_blocks}]
     end
+  end
+
+  defp get_api_key(opts) do
+    case Keyword.get(opts, :api_key) do
+      nil ->
+        {:error,
+         InvalidRequest.exception(
+           module: __MODULE__,
+           cause: "API key is required to fetch available models"
+         )}
+
+      api_key when is_binary(api_key) ->
+        {:ok, api_key}
+
+      _ ->
+        {:error,
+         InvalidRequest.exception(
+           module: __MODULE__,
+           cause: "API key must be a string"
+         )}
+    end
+  end
+
+  defp call_models_api(api_key, opts) do
+    version = Keyword.get(opts, :version, "2023-06-01")
+
+    client =
+      Req.new(
+        base_url: "https://api.anthropic.com/v1",
+        headers: %{
+          :"x-api-key" => api_key,
+          :"anthropic-version" => version
+        },
+        plug:
+          case opts[:http_adapter] do
+            nil -> nil
+            adapter -> {adapter, __MODULE__}
+          end
+      )
+
+    case Req.get(client, url: "/models") do
+      {:ok, %Req.Response{status: 200, body: body}} ->
+        {:ok, body}
+
+      {:ok, %Req.Response{status: status, body: body}} when status in 400..499 ->
+        {:error, InvalidRequest.exception(module: __MODULE__, cause: body)}
+
+      {:ok, %Req.Response{status: status, body: body}} when status in 500..599 ->
+        {:error, UnexpectedLLMResponse.exception(module: __MODULE__, status: status, cause: body)}
+
+      {:error, error} ->
+        {:error,
+         UnexpectedLLMResponse.exception(
+           module: __MODULE__,
+           cause: "Failed to connect to Anthropic API: #{inspect(error)}"
+         )}
+    end
+  end
+
+  defp extract_model_ids(%{"data" => models}) when is_list(models) do
+    Enum.map(models, fn model ->
+      Map.get(model, "id")
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp extract_model_ids(_response) do
+    []
   end
 end

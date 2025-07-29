@@ -51,8 +51,15 @@ defmodule BeamMePrompty.LLM do
               {:ok, response} | {:error, any()}
 
   @doc """
+  Retrieves a list of available models from the LLM provider.
+  """
+  @callback available_models(opts :: keyword()) :: {:ok, [String.t()]} | {:error, any()}
+
+  @doc """
   A convenience function to call the `completion/4` callback on a specific client module.
   """
   def completion(client_module, model, messages, llm_params, tools \\ [], opts \\ []),
     do: client_module.completion(model, messages, llm_params, tools, opts)
+
+  def available_models(client_module, opts \\ []), do: client_module.available_models(opts)
 end
